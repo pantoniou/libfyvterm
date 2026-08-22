@@ -61,13 +61,19 @@ static void do_escape(VTerm *vt, char command)
   DEBUG_LOG("libvterm: Unhandled escape ESC 0x%02x\n", command);
 }
 
-static void string_fragment(VTerm *vt, const char *str, size_t len, bool final)
+/* Neovim carries the terminator field here (upstream commit 03377b9552,
+ * "feat(terminal): include sequence terminator in TermRequest event"): a
+ * caller cannot otherwise tell whether the query it is replying to used BEL
+ * or ST, and a reply should echo the same terminator back. */
+static void string_fragment(VTerm *vt, const char *str, size_t len, bool final,
+                             VTermTerminator terminator)
 {
   VTermStringFragment frag = {
     .str     = str,
     .len     = len,
     .initial = vt->parser.string_initial,
     .final   = final,
+    .terminator = terminator,
   };
 
   switch(vt->parser.state) {
@@ -147,7 +153,8 @@ size_t vterm_input_write(VTerm *vt, const char *bytes, size_t len)
 
     if(c == 0x00 || c == 0x7f) { // NUL, DEL
       if(IS_STRING_STATE()) {
-        string_fragment(vt, string_start, bytes + pos - string_start, false);
+        string_fragment(vt, string_start, bytes + pos - string_start, false,
+                         VTERM_TERMINATOR_ST);
         string_start = bytes + pos + 1;
       }
       if(vt->parser.emit_nul)
@@ -177,7 +184,8 @@ size_t vterm_input_write(VTerm *vt, const char *bytes, size_t len)
         continue; // All other C0s permitted in SOS
 
       if(IS_STRING_STATE())
-        string_fragment(vt, string_start, bytes + pos - string_start, false);
+        string_fragment(vt, string_start, bytes + pos - string_start, false,
+                         VTERM_TERMINATOR_ST);
       do_control(vt, c);
       if(IS_STRING_STATE())
         string_start = bytes + pos + 1;
@@ -302,7 +310,8 @@ string_state:
     case PM:
     case SOS:
       if(c == 0x07 || (c1_allowed && c == 0x9c)) {
-        string_fragment(vt, string_start, string_len, true);
+        string_fragment(vt, string_start, string_len, true,
+                         c == 0x07 ? VTERM_TERMINATOR_BEL : VTERM_TERMINATOR_ST);
         ENTER_NORMAL_STATE();
       }
       break;
@@ -384,7 +393,7 @@ string_state:
     size_t string_len = bytes + pos - string_start;
     if(vt->parser.in_esc)
       string_len -= 1;
-    string_fragment(vt, string_start, string_len, false);
+    string_fragment(vt, string_start, string_len, false, VTERM_TERMINATOR_ST);
   }
 
   return len;

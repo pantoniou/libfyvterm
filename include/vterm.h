@@ -217,11 +217,17 @@ typedef enum {
   VTERM_N_VALUETYPES
 } VTermValueType;
 
+typedef enum {
+  VTERM_TERMINATOR_BEL, /* \x07 */
+  VTERM_TERMINATOR_ST,  /* \x1b\x5c */
+} VTermTerminator;
+
 typedef struct {
   const char *str;
   size_t      len : 30;
   bool        initial : 1;
   bool        final : 1;
+  VTermTerminator terminator;
 } VTermStringFragment;
 
 typedef union {
