@@ -881,6 +881,10 @@ static void set_dec_mode(VTermState *state, int num, int val)
     state->mode.bracketpaste = val;
     break;
 
+  case 2026: // Synchronized output
+    settermprop_bool(state, VTERM_PROP_SYNCOUTPUT, val);
+    break;
+
   default:
     DEBUG_LOG("libvterm: Unknown DEC mode %d\n", num);
     return;
@@ -954,6 +958,10 @@ static void request_dec_mode(VTermState *state, int num)
 
     case 2004:
       reply = state->mode.bracketpaste;
+      break;
+
+    case 2026:
+      reply = state->mode.synchronized_output;
       break;
 
     default:
@@ -2285,6 +2293,9 @@ int vterm_state_set_termprop(VTermState *state, VTermProp prop, VTermValue *val)
     return 1;
   case VTERM_PROP_FOCUSREPORT:
     state->mode.report_focus = val->boolean;
+    return 1;
+  case VTERM_PROP_SYNCOUTPUT:
+    state->mode.synchronized_output = val->boolean;
     return 1;
 
   case VTERM_N_PROPS:
