@@ -314,6 +314,14 @@ static int on_text(const char bytes[], size_t len, void *user)
     !(bytes[eaten] & 0x80) ? &state->encoding[state->gl_set] :
     state->vt->mode.utf8   ? &state->encoding_utf8 :
                              &state->encoding[state->gr_set];
+  /* Neovim carries a fix here (upstream commit e40c5cb06d, "fix(vterm):
+   * handle split UTF-8 after ASCII properly"): an ASCII byte picks the
+   * gl_set encoding instance above even when it designates UTF-8, which
+   * keeps a second, independent decode state for a split multi-byte
+   * sequence that starts right after an ASCII byte. Route back to the one
+   * persistent UTF-8 instance whenever the resolved encoding is UTF-8. */
+  if(encoding->enc == state->encoding_utf8.enc)
+    encoding = &state->encoding_utf8;
 
   (*encoding->enc->decode)(encoding->enc, encoding->data,
       codepoints, &npoints, state->gsingle_set ? 1 : maxpoints,
