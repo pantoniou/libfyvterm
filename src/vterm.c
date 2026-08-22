@@ -9,7 +9,7 @@
  * API functions *
  *****************/
 
-static void *default_malloc(size_t size, void *allocdata)
+static void *default_malloc(size_t size, void *allocdata UNUSED)
 {
   void *ptr = malloc(size);
   if(ptr)
@@ -17,7 +17,7 @@ static void *default_malloc(size_t size, void *allocdata)
   return ptr;
 }
 
-static void default_free(void *ptr, void *allocdata)
+static void default_free(void *ptr, void *allocdata UNUSED)
 {
   free(ptr);
 }

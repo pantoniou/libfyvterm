@@ -104,7 +104,7 @@ static char *read_csi(void)
   /* TODO: This really should be a more robust CSI parser
    */
   char csi[32];
-  int i = 0;
+  size_t i = 0;
   for(; i < sizeof(csi)-1; i++) {
     char c = csi[i] = getchar();
     if(c >= 0x40 && c <= 0x7e)
@@ -123,7 +123,7 @@ static char *read_dcs(void)
 
   char dcs[32];
   bool in_esc = false;
-  int i = 0;
+  size_t i = 0;
   for(; i < sizeof(dcs)-1; ) {
     unsigned char c = getchar();
     if(c == 0x9c) // ST

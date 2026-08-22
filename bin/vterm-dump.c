@@ -18,9 +18,10 @@ static const char *special_end   = "}";
 
 static int parser_text(const char bytes[], size_t len, void *user)
 {
+  (void)user;
   unsigned char *b = (unsigned char *)bytes;
 
-  int i;
+  size_t i;
   for(i = 0; i < len; /* none */) {
     if(b[i] < 0x20)        // C0
       break;
@@ -47,7 +48,7 @@ static int parser_text(const char bytes[], size_t len, void *user)
       break;
   }
 
-  printf("%.*s", i, b);
+  printf("%.*s", (int)i, b);
   return i;
 }
 
@@ -63,6 +64,7 @@ static const char *name_c1[] = {
 
 static int parser_control(unsigned char control, void *user)
 {
+  (void)user;
   if(control < 0x20)
     printf("%s%s%s", special_begin, name_c0[control], special_end);
   else if(control == 0x7f)
@@ -79,6 +81,7 @@ static int parser_control(unsigned char control, void *user)
 
 static int parser_escape(const char bytes[], size_t len, void *user)
 {
+  (void)user;
   if(bytes[0] >= 0x20 && bytes[0] < 0x30) {
     if(len < 2)
       return -1;
@@ -109,6 +112,7 @@ static const int newline_csi_plain[] = {
 
 static int parser_csi(const char *leader, const long args[], int argcount, const char *intermed, char command, void *user)
 {
+  (void)user;
   const char *name = NULL;
   if(!leader && !intermed && command < 0x70)
     name = name_csi_plain[command - 0x40];
@@ -158,6 +162,7 @@ static int parser_csi(const char *leader, const long args[], int argcount, const
 
 static int parser_osc(int command, VTermStringFragment frag, void *user)
 {
+  (void)user;
   if(frag.initial) {
     if(command == -1)
       printf("%sOSC ", special_begin);
@@ -175,6 +180,7 @@ static int parser_osc(int command, VTermStringFragment frag, void *user)
 
 static int parser_dcs(const char *command, size_t commandlen, VTermStringFragment frag, void *user)
 {
+  (void)user;
   if(frag.initial)
     printf("%sDCS %.*s", special_begin, (int)commandlen, command);
 

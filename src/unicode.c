@@ -68,8 +68,9 @@
  */
 
 struct interval {
-  int first;
-  int last;
+  /* Codepoints, so unsigned: these are compared against a uint32_t. */
+  uint32_t first;
+  uint32_t last;
 };
 
 /* sorted list of non-overlapping intervals of non-spacing characters */

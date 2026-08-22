@@ -310,7 +310,7 @@ static int erase_internal(VTermRect rect, int selective, void *user)
   return 1;
 }
 
-static int erase_user(VTermRect rect, int selective, void *user)
+static int erase_user(VTermRect rect, int selective UNUSED, void *user)
 {
   VTermScreen *screen = user;
 
@@ -516,7 +516,7 @@ static int bell(void *user)
 
 /* How many cells are non-blank
  * Returns the position of the first blank cell in the trailing blank end */
-static int line_popcount(ScreenCell *buffer, int row, int rows, int cols)
+static int line_popcount(ScreenCell *buffer, int row, int rows UNUSED, int cols)
 {
   int col = cols - 1;
   while(col >= 0 && buffer[row * cols + col].chars[0] == 0)

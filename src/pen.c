@@ -88,7 +88,7 @@ static bool lookup_colour_palette(const VTermState *state, long index, VTermColo
   return false;
 }
 
-static int lookup_colour(const VTermState *state, int palette, const long args[], int argcount, VTermColor *col)
+static int lookup_colour(const VTermState *state UNUSED, int palette, const long args[], int argcount, VTermColor *col)
 {
   switch(palette) {
   case 2: // RGB mode - 3 args contain colour values directly
@@ -116,7 +116,7 @@ static int lookup_colour(const VTermState *state, int palette, const long args[]
 
 // Some conveniences
 
-static void setpenattr(VTermState *state, VTermAttr attr, VTermValueType type, VTermValue *val)
+static void setpenattr(VTermState *state, VTermAttr attr, VTermValueType type UNUSED, VTermValue *val)
 {
 #ifdef DEBUG
   if(type != vterm_get_attr_type(attr)) {
@@ -522,7 +522,7 @@ static int vterm_state_getpen_color(const VTermColor *col, int argi, long args[]
     return argi;
 }
 
-INTERNAL int vterm_state_getpen(VTermState *state, long args[], int argcount)
+INTERNAL int vterm_state_getpen(VTermState *state, long args[], int argcount UNUSED)
 {
   int argi = 0;
 

@@ -33,29 +33,26 @@ if(NOT CMAKE_BUILD_TYPE)
     endif()
 endif()
 
+# C dialect and warnings, matching the fyai tree this library is built for:
+# the newest standard the compiler supports, plus -Wall -Wextra.
+#
+# fyai also sets -Wdeclaration-after-statement; that is not carried here.
+# This code is written C99-style throughout, with declarations at the point
+# of first use, and rewriting ~150 sites to C89 placement would churn dense
+# terminal state machines for a style rule.
 if(CMAKE_C_COMPILER_ID MATCHES GNU|Clang)
-    add_compile_options(-Wall -Wextra -Wsign-compare -Wshadow)
-
-    # Newest C standard the compiler supports, mirroring libfyaml/libfymd4c.
     include(CheckCCompilerFlag)
-    set(_fyvt_std "")
-    check_c_compiler_flag(-std=gnu2x FYVT_HAS_GNU2X)
-    if(FYVT_HAS_GNU2X)
-        set(_fyvt_std -std=gnu2x)
+
+    check_c_compiler_flag("-std=gnu2x" FYVT_HAVE_GNU2X)
+    if(FYVT_HAVE_GNU2X)
+        set(FYVT_C_DIALECT "-std=gnu2x")
     else()
-        check_c_compiler_flag(-std=c2x FYVT_HAS_C2X)
-        if(FYVT_HAS_C2X)
-            set(_fyvt_std -std=c2x)
-        else()
-            check_c_compiler_flag(-std=gnu11 FYVT_HAS_GNU11)
-            if(FYVT_HAS_GNU11)
-                set(_fyvt_std -std=gnu11)
-            endif()
-        endif()
+        set(FYVT_C_DIALECT "-std=gnu11")
     endif()
-    if(_fyvt_std)
-        add_compile_options(${_fyvt_std})
-    endif()
+    add_compile_options(${FYVT_C_DIALECT})
+
+    set(FYVT_C_WARNINGS -Wall -Wextra)
+    add_compile_options(${FYVT_C_WARNINGS})
 
     add_compile_definitions(_GNU_SOURCE)
 elseif(MSVC)

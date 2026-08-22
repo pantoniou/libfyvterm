@@ -11,10 +11,28 @@
 # define INTERNAL
 #endif
 
+/* Mark a parameter a callback signature requires but the implementation does
+ * not read. An attribute rather than a "(void)x;" statement, so it stays on
+ * the declaration and out of the function body. */
+#if defined(__GNUC__)
+# define UNUSED __attribute__((unused))
+#else
+# define UNUSED
+#endif
+
+/* Mark a deliberate fall-through between switch cases. The compiler only
+ * honours a "fallthrough" comment placed immediately before the case label,
+ * which is not where these switches explain themselves. */
+#if defined(__GNUC__)
+# define FALLTHROUGH __attribute__((fallthrough))
+#else
+# define FALLTHROUGH ((void)0)
+#endif
+
 #ifdef DEBUG
 # define DEBUG_LOG(...) fprintf(stderr, __VA_ARGS__)
 #else
-# define DEBUG_LOG(...)
+# define DEBUG_LOG(...) do { } while(0)
 #endif
 
 #define ESC_S "\x1b"
@@ -202,6 +220,9 @@ struct VTermState
     void *user;
     char *buffer;
     size_t buflen;
+    /* True when the buffer above was allocated here rather than handed in
+     * by the caller, and so is ours to free. */
+    bool buffer_owned;
   } selection;
 
   /* Kitty keyboard protocol flag stack: one for the primary screen, one for

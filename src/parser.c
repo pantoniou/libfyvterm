@@ -122,7 +122,7 @@ static void string_fragment(VTerm *vt, const char *str, size_t len, bool final,
 size_t vterm_input_write(VTerm *vt, const char *bytes, size_t len)
 {
   size_t pos = 0;
-  const char *string_start;
+  const char *string_start = NULL;
 
   switch(vt->parser.state) {
   case NORMAL:
@@ -253,6 +253,7 @@ size_t vterm_input_write(VTerm *vt, const char *bytes, size_t len)
       vt->parser.v.csi.argi++;
       vt->parser.intermedlen = 0;
       vt->parser.state = CSI_INTERMED;
+      FALLTHROUGH;
     case CSI_INTERMED:
       if(is_intermed(c)) {
         if(vt->parser.intermedlen < INTERMED_MAX-1)

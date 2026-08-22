@@ -96,32 +96,32 @@ typedef struct {
 } keycodes_s;
 
 static keycodes_s keycodes[] = {
-  { KEYCODE_NONE }, // NONE
+  { KEYCODE_NONE,       0,      0 }, // NONE
 
-  { KEYCODE_ENTER,   '\r'   }, // ENTER
-  { KEYCODE_TAB,     '\t'   }, // TAB
-  { KEYCODE_LITERAL, '\x7f' }, // BACKSPACE == ASCII DEL
-  { KEYCODE_LITERAL, '\x1b' }, // ESCAPE
+  { KEYCODE_ENTER,      '\r',   0 }, // ENTER
+  { KEYCODE_TAB,        '\t',   0 }, // TAB
+  { KEYCODE_LITERAL,    '\x7f', 0 }, // BACKSPACE == ASCII DEL
+  { KEYCODE_LITERAL,    '\x1b', 0 }, // ESCAPE
 
-  { KEYCODE_CSI_CURSOR, 'A' }, // UP
-  { KEYCODE_CSI_CURSOR, 'B' }, // DOWN
-  { KEYCODE_CSI_CURSOR, 'D' }, // LEFT
-  { KEYCODE_CSI_CURSOR, 'C' }, // RIGHT
+  { KEYCODE_CSI_CURSOR, 'A',    0 }, // UP
+  { KEYCODE_CSI_CURSOR, 'B',    0 }, // DOWN
+  { KEYCODE_CSI_CURSOR, 'D',    0 }, // LEFT
+  { KEYCODE_CSI_CURSOR, 'C',    0 }, // RIGHT
 
-  { KEYCODE_CSINUM, '~', 2 },  // INS
-  { KEYCODE_CSINUM, '~', 3 },  // DEL
-  { KEYCODE_CSI_CURSOR, 'H' }, // HOME
-  { KEYCODE_CSI_CURSOR, 'F' }, // END
-  { KEYCODE_CSINUM, '~', 5 },  // PAGEUP
-  { KEYCODE_CSINUM, '~', 6 },  // PAGEDOWN
+  { KEYCODE_CSINUM,     '~',    2 }, // INS
+  { KEYCODE_CSINUM,     '~',    3 }, // DEL
+  { KEYCODE_CSI_CURSOR, 'H',    0 }, // HOME
+  { KEYCODE_CSI_CURSOR, 'F',    0 }, // END
+  { KEYCODE_CSINUM,     '~',    5 }, // PAGEUP
+  { KEYCODE_CSINUM,     '~',    6 }, // PAGEDOWN
 };
 
 static keycodes_s keycodes_fn[] = {
-  { KEYCODE_NONE },            // F0 - shouldn't happen
-  { KEYCODE_SS3,    'P' },     // F1
-  { KEYCODE_SS3,    'Q' },     // F2
-  { KEYCODE_SS3,    'R' },     // F3
-  { KEYCODE_SS3,    'S' },     // F4
+  { KEYCODE_NONE,   0,   0  }, // F0 - shouldn't happen
+  { KEYCODE_SS3,    'P', 0  }, // F1
+  { KEYCODE_SS3,    'Q', 0  }, // F2
+  { KEYCODE_SS3,    'R', 0  }, // F3
+  { KEYCODE_SS3,    'S', 0  }, // F4
   { KEYCODE_CSINUM, '~', 15 }, // F5
   { KEYCODE_CSINUM, '~', 17 }, // F6
   { KEYCODE_CSINUM, '~', 18 }, // F7
@@ -133,24 +133,24 @@ static keycodes_s keycodes_fn[] = {
 };
 
 static keycodes_s keycodes_kp[] = {
-  { KEYCODE_KEYPAD, '0', 'p' }, // KP_0
-  { KEYCODE_KEYPAD, '1', 'q' }, // KP_1
-  { KEYCODE_KEYPAD, '2', 'r' }, // KP_2
-  { KEYCODE_KEYPAD, '3', 's' }, // KP_3
-  { KEYCODE_KEYPAD, '4', 't' }, // KP_4
-  { KEYCODE_KEYPAD, '5', 'u' }, // KP_5
-  { KEYCODE_KEYPAD, '6', 'v' }, // KP_6
-  { KEYCODE_KEYPAD, '7', 'w' }, // KP_7
-  { KEYCODE_KEYPAD, '8', 'x' }, // KP_8
-  { KEYCODE_KEYPAD, '9', 'y' }, // KP_9
-  { KEYCODE_KEYPAD, '*', 'j' }, // KP_MULT
-  { KEYCODE_KEYPAD, '+', 'k' }, // KP_PLUS
-  { KEYCODE_KEYPAD, ',', 'l' }, // KP_COMMA
-  { KEYCODE_KEYPAD, '-', 'm' }, // KP_MINUS
-  { KEYCODE_KEYPAD, '.', 'n' }, // KP_PERIOD
-  { KEYCODE_KEYPAD, '/', 'o' }, // KP_DIVIDE
+  { KEYCODE_KEYPAD, '0',  'p' }, // KP_0
+  { KEYCODE_KEYPAD, '1',  'q' }, // KP_1
+  { KEYCODE_KEYPAD, '2',  'r' }, // KP_2
+  { KEYCODE_KEYPAD, '3',  's' }, // KP_3
+  { KEYCODE_KEYPAD, '4',  't' }, // KP_4
+  { KEYCODE_KEYPAD, '5',  'u' }, // KP_5
+  { KEYCODE_KEYPAD, '6',  'v' }, // KP_6
+  { KEYCODE_KEYPAD, '7',  'w' }, // KP_7
+  { KEYCODE_KEYPAD, '8',  'x' }, // KP_8
+  { KEYCODE_KEYPAD, '9',  'y' }, // KP_9
+  { KEYCODE_KEYPAD, '*',  'j' }, // KP_MULT
+  { KEYCODE_KEYPAD, '+',  'k' }, // KP_PLUS
+  { KEYCODE_KEYPAD, ',',  'l' }, // KP_COMMA
+  { KEYCODE_KEYPAD, '-',  'm' }, // KP_MINUS
+  { KEYCODE_KEYPAD, '.',  'n' }, // KP_PERIOD
+  { KEYCODE_KEYPAD, '/',  'o' }, // KP_DIVIDE
   { KEYCODE_KEYPAD, '\n', 'M' }, // KP_ENTER
-  { KEYCODE_KEYPAD, '=', 'X' }, // KP_EQUAL
+  { KEYCODE_KEYPAD, '=',  'X' }, // KP_EQUAL
 };
 
 /* Kitty's "CSI u" keypad codepoints; used in place of keycodes_kp when

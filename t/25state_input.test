@@ -132,6 +132,50 @@ PUSH "\e="
 INKEY 0 KP0
   output "\eOp"
 
+!Whole keypad in DECKPNM
+PUSH "\e>"
+INKEY 0 KP0
+  output "0"
+INKEY 0 KP9
+  output "9"
+INKEY 0 KPMult
+  output "*"
+INKEY 0 KPPlus
+  output "+"
+INKEY 0 KPComma
+  output ","
+INKEY 0 KPMinus
+  output "-"
+INKEY 0 KPPeriod
+  output "."
+INKEY 0 KPDivide
+  output "/"
+INKEY 0 KPEqual
+  output "="
+
+!Whole keypad in DECKPAM
+PUSH "\e="
+INKEY 0 KP0
+  output "\eOp"
+INKEY 0 KP9
+  output "\eOy"
+INKEY 0 KPMult
+  output "\eOj"
+INKEY 0 KPPlus
+  output "\eOk"
+INKEY 0 KPComma
+  output "\eOl"
+INKEY 0 KPMinus
+  output "\eOm"
+INKEY 0 KPPeriod
+  output "\eOn"
+INKEY 0 KPDivide
+  output "\eOo"
+INKEY 0 KPEnter
+  output "\eOM"
+INKEY 0 KPEqual
+  output "\eOX"
+
 !Bracketed paste mode off
 PASTE START
 PASTE END

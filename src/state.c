@@ -109,6 +109,8 @@ static VTermState *vterm_state_new(VTerm *vt)
 
 INTERNAL void vterm_state_free(VTermState *state)
 {
+  if(state->selection.buffer_owned)
+    vterm_allocator_free(state->vt, state->selection.buffer);
   vterm_allocator_free(state->vt, state->tabstops);
   vterm_allocator_free(state->vt, state->lineinfos[BUFIDX_PRIMARY]);
   if(state->lineinfos[BUFIDX_ALTSCREEN])
@@ -370,7 +372,7 @@ static int on_text(const char bytes[], size_t len, void *user)
 #endif
 
       /* Find where we need to append these combining chars */
-      int saved_i = 0;
+      size_t saved_i = 0;
       while(state->combine_chars[saved_i])
         saved_i++;
 
@@ -464,7 +466,7 @@ static int on_text(const char bytes[], size_t len, void *user)
     if(i == npoints - 1) {
       /* End of the buffer. Save the chars in case we have to combine with
        * more on the next call */
-      int save_i;
+      size_t save_i;
       for(save_i = 0; chars[save_i]; save_i++) {
         if(save_i >= state->combine_chars_size)
           grow_combine_buffer(state);
@@ -2023,7 +2025,7 @@ static void request_status_string(VTermState *state, VTermStringFragment frag)
   if(frag.initial)
     tmp[0] = tmp[1] = tmp[2] = tmp[3] = 0;
 
-  int i = 0;
+  size_t i = 0;
   while(i < sizeof(state->tmp.decrqss)-1 && tmp[i])
     i++;
   while(i < sizeof(state->tmp.decrqss)-1 && frag.len--)
@@ -2078,7 +2080,10 @@ static void request_status_string(VTermState *state, VTermStringFragment frag)
 
     case ' '|('q'<<8): {
       // Query DECSCUSR
-      int reply;
+      /* Default to the block shape: cursor_shape is only ever one of the
+       * three below, but a DECSCUSR query must still answer something if a
+       * future shape is added without updating this switch. */
+      int reply = 2;
       switch(state->mode.cursor_shape) {
         case VTERM_PROP_CURSORSHAPE_BLOCK:     reply = 2; break;
         case VTERM_PROP_CURSORSHAPE_UNDERLINE: reply = 4; break;
@@ -2474,13 +2479,22 @@ const VTermLineInfo *vterm_state_get_lineinfo(const VTermState *state, int row)
 void vterm_state_set_selection_callbacks(VTermState *state, const VTermSelectionCallbacks *callbacks, void *user,
     char *buffer, size_t buflen)
 {
-  if(buflen && !buffer)
-    buffer = vterm_allocator_malloc(state->vt, buflen);
+  bool owned = false;
 
-  state->selection.callbacks = callbacks;
-  state->selection.user      = user;
-  state->selection.buffer    = buffer;
-  state->selection.buflen    = buflen;
+  /* Replacing an earlier buffer we allocated ourselves. */
+  if(state->selection.buffer_owned)
+    vterm_allocator_free(state->vt, state->selection.buffer);
+
+  if(buflen && !buffer) {
+    buffer = vterm_allocator_malloc(state->vt, buflen);
+    owned = true;
+  }
+
+  state->selection.callbacks   = callbacks;
+  state->selection.user        = user;
+  state->selection.buffer      = buffer;
+  state->selection.buflen      = buflen;
+  state->selection.buffer_owned = owned;
 }
 
 void vterm_state_send_selection(VTermState *state, VTermSelectionMask mask, VTermStringFragment frag)
@@ -2489,7 +2503,7 @@ void vterm_state_send_selection(VTermState *state, VTermSelectionMask mask, VTer
 
   if(frag.initial) {
     /* TODO: support sending more than one mask bit */
-    const static char selection_chars[] = "cpqs";
+    static const char selection_chars[] = "cpqs";
     int idx;
     for(idx = 0; idx < 4; idx++)
       if(mask & (1 << idx))
