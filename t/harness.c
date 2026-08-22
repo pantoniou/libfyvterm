@@ -434,6 +434,8 @@ static struct {
   int font;
   int small;
   int baseline;
+  int dim;
+  int overline;
   VTermColor foreground;
   VTermColor background;
 } state_pen;
@@ -442,6 +444,12 @@ static int state_setpenattr(VTermAttr attr, VTermValue *val, void *user)
   switch(attr) {
   case VTERM_ATTR_BOLD:
     state_pen.bold = val->boolean;
+    break;
+  case VTERM_ATTR_DIM:
+    state_pen.dim = val->boolean;
+    break;
+  case VTERM_ATTR_OVERLINE:
+    state_pen.overline = val->boolean;
     break;
   case VTERM_ATTR_UNDERLINE:
     state_pen.underline = val->number;
@@ -1054,6 +1062,22 @@ int main(int argc, char **argv)
             printf("%s\n", state_pen.baseline == VTERM_BASELINE_RAISE ? "raise"
                          : state_pen.baseline == VTERM_BASELINE_LOWER ? "lower"
                          : "normal");
+        }
+        else if(streq(linep, "dim")) {
+          vterm_state_get_penattr(state, VTERM_ATTR_DIM, &val);
+          if(val.boolean != state_pen.dim)
+            printf("! pen dim mismatch; state=%s, event=%s\n",
+                BOOLSTR(val.boolean), BOOLSTR(state_pen.dim));
+          else
+            printf("%s\n", BOOLSTR(state_pen.dim));
+        }
+        else if(streq(linep, "overline")) {
+          vterm_state_get_penattr(state, VTERM_ATTR_OVERLINE, &val);
+          if(val.boolean != state_pen.overline)
+            printf("! pen overline mismatch; state=%s, event=%s\n",
+                BOOLSTR(val.boolean), BOOLSTR(state_pen.overline));
+          else
+            printf("%s\n", BOOLSTR(state_pen.overline));
         }
         else if(streq(linep, "foreground")) {
           print_color(&state_pen.foreground);

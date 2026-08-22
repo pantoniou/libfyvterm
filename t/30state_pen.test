@@ -18,6 +18,26 @@ PUSH "\e[1m"
   ?pen bold = on
 PUSH "\e[22m"
   ?pen bold = off
+
+!Dim
+PUSH "\e[2m"
+  ?pen dim = on
+PUSH "\e[22m"
+  ?pen dim = off
+
+!SGR 22 clears bold and dim together
+PUSH "\e[1;2m"
+  ?pen bold = on
+  ?pen dim = on
+PUSH "\e[22m"
+  ?pen bold = off
+  ?pen dim = off
+
+!Overline
+PUSH "\e[53m"
+  ?pen overline = on
+PUSH "\e[55m"
+  ?pen overline = off
 PUSH "\e[1m\e[m"
   ?pen bold = off
 

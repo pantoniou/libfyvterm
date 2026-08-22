@@ -54,6 +54,8 @@ struct VTermPen
   unsigned int font:4; /* To store 0-9 */
   unsigned int small:1;
   unsigned int baseline:2;
+  unsigned int dim:1;
+  unsigned int overline:1;
 };
 
 struct VTermState
