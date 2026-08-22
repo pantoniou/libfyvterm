@@ -102,7 +102,12 @@ static void string_fragment(VTerm *vt, const char *str, size_t len, bool final)
     case CSI_INTERMED:
     case OSC_COMMAND:
     case DCS_COMMAND:
-      break;
+      /* Neovim carries a fix here (upstream commit b28bbee539, "fix
+       * (terminal): skip setting string_initial to false on no-op"): these
+       * states mean the string has not actually started yet (nothing was
+       * sent to a callback above), so clearing string_initial here would
+       * make the real first fragment of the string report initial=false. */
+      return;
   }
 
   vt->parser.string_initial = false;
