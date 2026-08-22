@@ -538,7 +538,7 @@ static void resize_buffer(VTermScreen *screen, int bufidx, int new_rows, int new
       old_cols, old_rows, new_cols, new_rows, old_cursor.col, old_cursor.row);
 #endif
 
-  /* Keep track of the final row that is knonw to be blank, so we know what
+  /* Keep track of the final row that is known to be blank, so we know what
    * spare space we have for scrolling into
    */
   int final_blank_row = new_rows;
@@ -650,7 +650,12 @@ static void resize_buffer(VTermScreen *screen, int bufidx, int new_rows, int new
         count--;
       }
 
-      if(old_cursor.row == old_row && old_cursor.col >= old_col) {
+      /* Neovim carries a resize cursor fix here (upstream commit
+       * 635acc7dc8, "fix(terminal): cursor moves on resize when line above
+       * is full width"): without the old_row_end bound, this branch could
+       * also match a row above the one the cursor left, moving it when the
+       * line above old_row_end is exactly old_cols wide. */
+      if(old_row <= old_row_end && old_cursor.row == old_row && old_cursor.col >= old_col) {
         new_cursor.row = new_row, new_cursor.col = (old_cursor.col - old_col + new_col);
         if(new_cursor.col >= new_cols)
           new_cursor.col = new_cols-1;
