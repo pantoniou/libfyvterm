@@ -145,6 +145,23 @@ jobs:
         pkg-config --define-variable=prefix="${PWD}" \
           --cflags --libs "${PWD}/lib/pkgconfig/libfyvterm.pc"
 
+    # The opaque-API rule: the ABI is exactly the FYVT_EXPORT-tagged entry
+    # points, and nothing else escapes hidden visibility.
+    - name: Check only fyvt_ symbols are exported
+      if: runner.os == 'Linux' && matrix.shared == 'ON'
+      shell: bash
+      run: |
+        so=$(ls build/src/libfyvterm.so.*.*.* | head -n1)
+        echo "checking ${so}"
+        leaked=$(nm -D --defined-only "${so}" \
+          | awk '$2 ~ /^[A-Z]$/ { print $3 }' | grep -v '^fyvt_' || true)
+        if [ -n "${leaked}" ]; then
+          echo "::error::non-fyvt_ symbols leaked into the public ABI"
+          echo "${leaked}"
+          exit 1
+        fi
+        echo "exported: $(nm -D --defined-only "${so}" | awk '$2 ~ /^[A-Z]$/' | wc -l) symbols, all fyvt_"
+
     - name: Upload test logs on failure
       if: failure()
       uses: actions/upload-artifact@v4
