@@ -1,17 +1,15 @@
 bin/
  - contains some standalone programs
 
-bin/unterm.c
- - an example program using libvterm to reconstruct the final state of a
+bin/fyvt-unterm.c
+ - an example program using the library to reconstruct the final state of a
    terminal after replaying captured input
 
-bin/vterm-ctrl.c
- - a helper program that emits sequences to control a running libvterm
-   terminal
+bin/fyvt-ctrl.c
+ - a helper program that emits sequences to control a running terminal
 
-bin/vterm-dump.c
- - an example program using the parser layer of libvterm to interpret captured
-   input
+bin/fyvt-dump.c
+ - an example program using the parser layer to interpret captured input
 
 CODE-MAP
  - high-level list and description of files in the repository
@@ -25,11 +23,13 @@ doc/
 doc/seqs.txt
  - documents the sequences recognised by the library
 
-include/vterm.h
- - main include file
+include/libfyvterm.h
+ - umbrella include file; pulls in everything under include/libfyvterm/
 
-include/vterm_keycodes.h
- - include file containing the keyboard input keycode enumerations
+include/libfyvterm/
+ - the public headers, split by layer: -util.h (shared types, the
+   FYVT_EXPORT macro), -core.h (the terminal instance), -keys.h (keyboard
+   and mouse), -parser.h, -state.h, -screen.h
 
 LICENSE
  - legalese
@@ -71,10 +71,10 @@ src/state.c
 src/unicode.c
  - utility functions for Unicode and UTF-8 handling
 
-src/vterm.c
+src/fyvt.c
  - toplevel object state and miscellaneous functions
 
-src/vterm_internal.h
+src/fyvt_internal.h
  - include file for definitions private to the library's internals
 
 t/
@@ -82,7 +82,7 @@ t/
 
 t/harness.c
  - the command interpreter the test scripts drive; turns a line of the test
-   command language into libvterm calls and records the callback events
+   command language into library calls and records the callback events
 
 t/run-test.c
  - reads a .test script, drives the harness with it, and compares the

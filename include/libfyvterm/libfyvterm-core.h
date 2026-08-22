@@ -36,12 +36,19 @@ extern "C" {
 
 void fyvt_check_version(int major, int minor) FYVT_EXPORT;
 
+/*
+ * Configuration for fyvt_create(). Zero-initialise it, or call
+ * fyvt_cfg_default(), and set only what you need: every field falls back to
+ * a sensible default.
+ */
 struct fyvt_cfg {
-  int ver; /* currently unused but reserved for some sort of ABI version flag */
+  /* sizeof(struct fyvt_cfg), so the library can tell which fields a caller
+   * compiled against. fyvt_cfg_default() fills this in. */
+  size_t struct_size;
 
-  int rows, cols;
+  int rows, cols;              /* default: 25x80 */
 
-  const struct fyvt_allocator *allocator;
+  const struct fyvt_allocator *allocator;  /* default: malloc/free */
   void *allocdata;
 
   /* Override default sizes for various structures */
@@ -49,14 +56,29 @@ struct fyvt_cfg {
   size_t tmpbuffer_len;  /* default: 4096 */
 };
 
-struct fyvt *fyvt_build(const struct fyvt_cfg *builder) FYVT_EXPORT;
+/*
+ * fyvt_cfg_default() - fill a configuration with the defaults
+ *
+ * Sets struct_size and leaves every other field zero, which is what the
+ * defaults above are expressed as.
+ */
+void fyvt_cfg_default(struct fyvt_cfg *cfg) FYVT_EXPORT;
 
-/* A convenient shortcut for default cases */
-struct fyvt *fyvt_new(int rows, int cols) FYVT_EXPORT;
-/* This shortcuts are generally discouraged in favour of just using fyvt_build() */
-struct fyvt *fyvt_new_with_allocator(int rows, int cols, struct fyvt_allocator *funcs, void *allocdata) FYVT_EXPORT;
+/*
+ * fyvt_create() - create a terminal instance
+ *
+ * Creates a terminal using the given configuration, or the defaults if cfg
+ * is NULL. Returns NULL on error.
+ */
+struct fyvt *fyvt_create(const struct fyvt_cfg *cfg) FYVT_EXPORT;
 
-void   fyvt_free(struct fyvt* vt) FYVT_EXPORT;
+/*
+ * fyvt_destroy() - release a terminal instance
+ *
+ * Also releases the state and screen layers obtained from it, if any.
+ * Does nothing when vt is NULL.
+ */
+void fyvt_destroy(struct fyvt *vt) FYVT_EXPORT;
 
 void fyvt_get_size(const struct fyvt *vt, int *rowsp, int *colsp) FYVT_EXPORT;
 void fyvt_set_size(struct fyvt *vt, int rows, int cols) FYVT_EXPORT;

@@ -58,12 +58,20 @@ extern "C" {
   #endif
 #endif
 
+/* Kept in step with the CMake project version; the build asserts it. */
 #define FYVT_VERSION_MAJOR 0
-#define FYVT_VERSION_MINOR 3
-#define FYVT_VERSION_PATCH 3
+#define FYVT_VERSION_MINOR 0
+#define FYVT_VERSION_PATCH 1
 
 #define FYVT_CHECK_VERSION \
         fyvt_check_version(FYVT_VERSION_MAJOR, FYVT_VERSION_MINOR)
+
+/*
+ * fyvt_version_string() - the library version this binary was built as
+ *
+ * Returns a static string; the caller does not own it.
+ */
+const char *fyvt_version_string(void) FYVT_EXPORT;
 
 /* Any cell can contain at most one basic printing character and 5 combining
  * characters. This number could be changed but will be ABI-incompatible if

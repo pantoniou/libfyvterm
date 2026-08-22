@@ -27,39 +27,36 @@ static struct fyvt_allocator default_allocator = {
   .free   = &default_free,
 };
 
-struct fyvt *fyvt_new(int rows, int cols)
+void fyvt_cfg_default(struct fyvt_cfg *cfg)
 {
-  return fyvt_build(&(const struct fyvt_cfg){
-      .rows = rows,
-      .cols = cols,
-    });
+  if(!cfg)
+    return;
+
+  memset(cfg, 0, sizeof(*cfg));
+  cfg->struct_size = sizeof(*cfg);
 }
 
-struct fyvt *fyvt_new_with_allocator(int rows, int cols, struct fyvt_allocator *funcs, void *allocdata)
-{
-  return fyvt_build(&(const struct fyvt_cfg){
-      .rows = rows,
-      .cols = cols,
-      .allocator = funcs,
-      .allocdata = allocdata,
-    });
-}
-
-/* A handy macro for defaulting values out of builder fields */
+/* A handy macro for defaulting values out of the configuration fields */
 #define DEFAULT(v, def)  ((v) ? (v) : (def))
 
-struct fyvt *fyvt_build(const struct fyvt_cfg *builder)
+struct fyvt *fyvt_create(const struct fyvt_cfg *cfg)
 {
-  const struct fyvt_allocator *allocator = DEFAULT(builder->allocator, &default_allocator);
+  const struct fyvt_cfg defaults = { .struct_size = sizeof(struct fyvt_cfg) };
+  const struct fyvt_allocator *allocator;
+
+  if(!cfg)
+    cfg = &defaults;
+
+  allocator = DEFAULT(cfg->allocator, &default_allocator);
 
   /* Need to bootstrap using the allocator function directly */
-  struct fyvt *vt = (*allocator->malloc)(sizeof(struct fyvt), builder->allocdata);
+  struct fyvt *vt = (*allocator->malloc)(sizeof(struct fyvt), cfg->allocdata);
 
   vt->allocator = allocator;
-  vt->allocdata = builder->allocdata;
+  vt->allocdata = cfg->allocdata;
 
-  vt->rows = builder->rows;
-  vt->cols = builder->cols;
+  vt->rows = DEFAULT(cfg->rows, 25);
+  vt->cols = DEFAULT(cfg->cols, 80);
 
   vt->parser.state = NORMAL;
 
@@ -71,18 +68,21 @@ struct fyvt *fyvt_build(const struct fyvt_cfg *builder)
   vt->outfunc = NULL;
   vt->outdata = NULL;
 
-  vt->outbuffer_len = DEFAULT(builder->outbuffer_len, 4096);
+  vt->outbuffer_len = DEFAULT(cfg->outbuffer_len, 4096);
   vt->outbuffer_cur = 0;
   vt->outbuffer = fyvt_allocator_malloc(vt, vt->outbuffer_len);
 
-  vt->tmpbuffer_len = DEFAULT(builder->tmpbuffer_len, 4096);
+  vt->tmpbuffer_len = DEFAULT(cfg->tmpbuffer_len, 4096);
   vt->tmpbuffer = fyvt_allocator_malloc(vt, vt->tmpbuffer_len);
 
   return vt;
 }
 
-void fyvt_free(struct fyvt *vt)
+void fyvt_destroy(struct fyvt *vt)
 {
+  if(!vt)
+    return;
+
   if(vt->screen)
     fyvt_screen_free(vt->screen);
 
@@ -95,12 +95,12 @@ void fyvt_free(struct fyvt *vt)
   fyvt_allocator_free(vt, vt);
 }
 
-INTERNAL void *fyvt_allocator_malloc(struct fyvt *vt, size_t size)
+void *fyvt_allocator_malloc(struct fyvt *vt, size_t size)
 {
   return (*vt->allocator->malloc)(size, vt->allocdata);
 }
 
-INTERNAL void fyvt_allocator_free(struct fyvt *vt, void *ptr)
+void fyvt_allocator_free(struct fyvt *vt, void *ptr)
 {
   (*vt->allocator->free)(ptr, vt->allocdata);
 }
@@ -141,7 +141,7 @@ void fyvt_output_set_callback(struct fyvt *vt, fyvt_output_callback *func, void 
   vt->outdata = user;
 }
 
-INTERNAL void fyvt_push_output_bytes(struct fyvt *vt, const char *bytes, size_t len)
+void fyvt_push_output_bytes(struct fyvt *vt, const char *bytes, size_t len)
 {
   if(vt->outfunc) {
     (vt->outfunc)(bytes, len, vt->outdata);
@@ -155,7 +155,7 @@ INTERNAL void fyvt_push_output_bytes(struct fyvt *vt, const char *bytes, size_t 
   vt->outbuffer_cur += len;
 }
 
-INTERNAL void fyvt_push_output_vsprintf(struct fyvt *vt, const char *format, va_list args)
+void fyvt_push_output_vsprintf(struct fyvt *vt, const char *format, va_list args)
 {
   size_t len = vsnprintf(vt->tmpbuffer, vt->tmpbuffer_len,
       format, args);
@@ -163,7 +163,7 @@ INTERNAL void fyvt_push_output_vsprintf(struct fyvt *vt, const char *format, va_
   fyvt_push_output_bytes(vt, vt->tmpbuffer, len);
 }
 
-INTERNAL void fyvt_push_output_sprintf(struct fyvt *vt, const char *format, ...)
+void fyvt_push_output_sprintf(struct fyvt *vt, const char *format, ...)
 {
   va_list args;
   va_start(args, format);
@@ -171,7 +171,7 @@ INTERNAL void fyvt_push_output_sprintf(struct fyvt *vt, const char *format, ...)
   va_end(args);
 }
 
-INTERNAL void fyvt_push_output_sprintf_ctrl(struct fyvt *vt, unsigned char ctrl, const char *fmt, ...)
+void fyvt_push_output_sprintf_ctrl(struct fyvt *vt, unsigned char ctrl, const char *fmt, ...)
 {
   size_t cur;
 
@@ -197,7 +197,7 @@ INTERNAL void fyvt_push_output_sprintf_ctrl(struct fyvt *vt, unsigned char ctrl,
   fyvt_push_output_bytes(vt, vt->tmpbuffer, cur);
 }
 
-INTERNAL void fyvt_push_output_sprintf_str(struct fyvt *vt, unsigned char ctrl, bool term, const char *fmt, ...)
+void fyvt_push_output_sprintf_str(struct fyvt *vt, unsigned char ctrl, bool term, const char *fmt, ...)
 {
   size_t cur = 0;
 
@@ -416,16 +416,25 @@ void fyvt_copy_cells(struct fyvt_rect dest,
     }
 }
 
+const char *fyvt_version_string(void)
+{
+#ifdef FYVT_VERSION_STRING
+  return FYVT_VERSION_STRING;
+#else
+  return "unknown";
+#endif
+}
+
 void fyvt_check_version(int major, int minor)
 {
   if(major != FYVT_VERSION_MAJOR) {
-    fprintf(stderr, "libvterm major version mismatch; %d (wants) != %d (library)\n",
+    fprintf(stderr, "libfyvterm major version mismatch; %d (wants) != %d (library)\n",
         major, FYVT_VERSION_MAJOR);
     exit(1);
   }
 
   if(minor > FYVT_VERSION_MINOR) {
-    fprintf(stderr, "libvterm minor version mismatch; %d (wants) > %d (library)\n",
+    fprintf(stderr, "libfyvterm minor version mismatch; %d (wants) > %d (library)\n",
         minor, FYVT_VERSION_MINOR);
     exit(1);
   }

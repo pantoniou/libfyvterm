@@ -1,15 +1,9 @@
-#ifndef __VTERM_INTERNAL_H__
-#define __VTERM_INTERNAL_H__
+#ifndef LIBFYVTERM_INTERNAL_H
+#define LIBFYVTERM_INTERNAL_H
 
 #include <libfyvterm.h>
 
 #include <stdarg.h>
-
-#if defined(__GNUC__)
-# define INTERNAL __attribute__((visibility("internal")))
-#else
-# define INTERNAL
-#endif
 
 /* Mark a parameter a callback signature requires but the implementation does
  * not read. An attribute rather than a "(void)x;" statement, so it stays on
@@ -34,6 +28,19 @@
 #else
 # define DEBUG_LOG(...) do { } while(0)
 #endif
+
+/*
+ * The identity this terminal reports to XTVERSION (CSI > q).
+ *
+ * Deliberately still "libvterm(0.3)" and deliberately NOT the libfyvterm
+ * version: applications sniff this string to decide what the terminal can
+ * do, and every one of them that knows this library knows it by that name.
+ * Renumbering it with the fork's own version would tell them a libvterm
+ * 0.0 exists, which is worse than saying nothing new.
+ */
+#define FYVT_XTVERSION_NAME  "libvterm"
+#define FYVT_XTVERSION_MAJOR 0
+#define FYVT_XTVERSION_MINOR 3
 
 #define ESC_S "\x1b"
 

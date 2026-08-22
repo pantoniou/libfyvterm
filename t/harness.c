@@ -774,7 +774,7 @@ int harness_command(const char *cmdline)
 
     if(streq(line, "INIT")) {
       if(!vt)
-        vt = fyvt_new(25, 80);
+        vt = fyvt_create(NULL);
 
       fyvt_output_set_callback(vt, term_output, NULL);
     }
@@ -1385,7 +1385,7 @@ int harness_command(const char *cmdline)
 void harness_cleanup(void)
 {
   if(vt) {
-    fyvt_free(vt);
+    fyvt_destroy(vt);
     vt = NULL;
     state = NULL;
     screen = NULL;

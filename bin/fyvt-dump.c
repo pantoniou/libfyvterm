@@ -231,7 +231,7 @@ int main(int argc, char *argv[])
   }
 
   /* Size matters not for the parser */
-  struct fyvt *vt = fyvt_new(25, 80);
+  struct fyvt *vt = fyvt_create(NULL);
   fyvt_set_utf8(vt, 1);
   fyvt_parser_set_callbacks(vt, &parser_cbs, NULL);
   fyvt_parser_set_emit_nul(vt, true);
@@ -245,7 +245,7 @@ int main(int argc, char *argv[])
   printf("\n");
 
   close(fd);
-  fyvt_free(vt);
+  fyvt_destroy(vt);
 
   return 0;
 }

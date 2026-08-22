@@ -1,22 +1,31 @@
 How to Contribute
 -----------------
 
-The main resources for this library are:
+libfyvterm is a hard fork. Bug reports, feature requests and patches for it
+belong here:
 
-  Launchpad
-    https://launchpad.net/libvterm
+    https://github.com/pantoniou/libfyvterm
 
-  IRC:
-    ##tty or #tickit on irc.libera.chat
+Please do not send them to the original libvterm's author or to Neovim: this
+tree has diverged from both. See PROVENANCE.md for what it took from each and
+where the fork's own history begins.
 
-  Email:
-    Paul "LeoNerd" Evans <leonerd@leonerd.org.uk>
+Before starting on anything substantial, open an issue to discuss it. That
+avoids duplicating work already in progress and settles design questions
+before code is written.
 
+For a change to the terminal's behaviour, add or update a test script under
+t/. The suite is the only thing that makes a change to a 2000-line state
+machine reviewable: each script interleaves harness commands with the
+callback events they should produce, and CTest runs one case per file.
 
-Bug reports and feature requests can be sent to any of the above resources.
+    cmake -S . -B build
+    cmake --build build -j
+    ctest --test-dir build --output-on-failure
 
-New features, bug patches, etc.. should in the first instance be discussed via
-any of the resources listed above, before starting work on the actual code.
-There may be future plans or development already in-progress that could be
-affected so it is better to discuss the ideas first before starting work
-actually writing any code.
+The build is warning-clean under -Wall -Wextra with gcc and clang, in Debug
+and Release, with and without -DENABLE_ASAN=ON. Please keep it that way.
+
+If you are porting a fix from Neovim's src/nvim/vterm, cite the upstream
+commit in both the commit message and a comment at the change site, and add
+it to the list in PROVENANCE.md, as the existing entries do.

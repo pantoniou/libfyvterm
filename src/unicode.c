@@ -300,7 +300,7 @@ static const struct interval fullwidth[] = {
 #include "fullwidth.inc"
 };
 
-INTERNAL int fyvt_unicode_width(uint32_t codepoint)
+int fyvt_unicode_width(uint32_t codepoint)
 {
   if(bisearch(codepoint, fullwidth, sizeof(fullwidth) / sizeof(fullwidth[0]) - 1))
     return 2;
@@ -308,7 +308,7 @@ INTERNAL int fyvt_unicode_width(uint32_t codepoint)
   return mk_wcwidth(codepoint);
 }
 
-INTERNAL int fyvt_unicode_is_combining(uint32_t codepoint)
+int fyvt_unicode_is_combining(uint32_t codepoint)
 {
   return bisearch(codepoint, combining, sizeof(combining) / sizeof(struct interval) - 1);
 }

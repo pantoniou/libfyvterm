@@ -107,7 +107,7 @@ static struct fyvt_state *fyvt_state_new(struct fyvt *vt)
   return state;
 }
 
-INTERNAL void fyvt_state_free(struct fyvt_state *state)
+void fyvt_state_free(struct fyvt_state *state)
 {
   if(state->selection.buffer_owned)
     fyvt_allocator_free(state->vt, state->selection.buffer);
@@ -991,8 +991,8 @@ static void request_dec_mode(struct fyvt_state *state, int num)
 
 static void request_version_string(struct fyvt_state *state)
 {
-  fyvt_push_output_sprintf_str(state->vt, C1_DCS, true, ">|libvterm(%d.%d)",
-      FYVT_VERSION_MAJOR, FYVT_VERSION_MINOR);
+  fyvt_push_output_sprintf_str(state->vt, C1_DCS, true, ">|" FYVT_XTVERSION_NAME "(%d.%d)",
+      FYVT_XTVERSION_MAJOR, FYVT_XTVERSION_MINOR);
 }
 
 /* Kitty keyboard protocol flag stack (upstream commit 6f0bde11cc,

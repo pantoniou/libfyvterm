@@ -29,6 +29,24 @@ set(_fyvterm_sources
 
 set(_fyvterm_incdir ${PROJECT_SOURCE_DIR}/include)
 
+# The public header carries FYVT_VERSION_* for FYVT_CHECK_VERSION, and the
+# project() call carries the same version for the SONAME and the .pc file.
+# They must agree; catch drift at configure time rather than at a consumer's
+# runtime version check.
+set(_fyvt_util_h ${_fyvterm_incdir}/libfyvterm/libfyvterm-util.h)
+file(STRINGS ${_fyvt_util_h} _fyvt_ver_major REGEX "^#define FYVT_VERSION_MAJOR ")
+file(STRINGS ${_fyvt_util_h} _fyvt_ver_minor REGEX "^#define FYVT_VERSION_MINOR ")
+file(STRINGS ${_fyvt_util_h} _fyvt_ver_patch REGEX "^#define FYVT_VERSION_PATCH ")
+string(REGEX REPLACE "[^0-9]" "" _fyvt_ver_major "${_fyvt_ver_major}")
+string(REGEX REPLACE "[^0-9]" "" _fyvt_ver_minor "${_fyvt_ver_minor}")
+string(REGEX REPLACE "[^0-9]" "" _fyvt_ver_patch "${_fyvt_ver_patch}")
+set(_fyvt_hdr_version "${_fyvt_ver_major}.${_fyvt_ver_minor}.${_fyvt_ver_patch}")
+if(NOT _fyvt_hdr_version STREQUAL PROJECT_VERSION)
+    message(FATAL_ERROR
+        "version mismatch: ${_fyvt_util_h} says ${_fyvt_hdr_version}, "
+        "project() says ${PROJECT_VERSION}")
+endif()
+
 add_library(fyvterm        ${_fyvterm_sources})
 add_library(fyvterm_static STATIC ${_fyvterm_sources})
 

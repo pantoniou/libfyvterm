@@ -99,8 +99,6 @@ void *fyvt_screen_get_unrecognised_fbdata(struct fyvt_screen *screen) FYVT_EXPOR
 
 void fyvt_screen_enable_reflow(struct fyvt_screen *screen, bool reflow) FYVT_EXPORT;
 
-// Back-compat alias for the brief time it was in 0.3-RC1
-#define fyvt_screen_set_reflow  fyvt_screen_enable_reflow
 
 void fyvt_screen_enable_altscreen(struct fyvt_screen *screen, int altscreen) FYVT_EXPORT;
 

@@ -156,7 +156,7 @@ static void set_pen_col_ansi(struct fyvt_state *state, enum fyvt_attr attr, long
   setpenattr_col(state, attr, *colp);
 }
 
-INTERNAL void fyvt_state_newpen(struct fyvt_state *state)
+void fyvt_state_newpen(struct fyvt_state *state)
 {
   // 90% grey so that pure white is brighter
   fyvt_color_rgb(&state->default_fg, 240, 240, 240);
@@ -167,7 +167,7 @@ INTERNAL void fyvt_state_newpen(struct fyvt_state *state)
     lookup_default_colour_ansi(col, &state->colors[col]);
 }
 
-INTERNAL void fyvt_state_resetpen(struct fyvt_state *state)
+void fyvt_state_resetpen(struct fyvt_state *state)
 {
   state->pen.bold = 0;      setpenattr_bool(state, FYVT_ATTR_BOLD, 0);
   state->pen.underline = 0; setpenattr_int (state, FYVT_ATTR_UNDERLINE, 0);
@@ -186,7 +186,7 @@ INTERNAL void fyvt_state_resetpen(struct fyvt_state *state)
   state->pen.bg = state->default_bg;  setpenattr_col(state, FYVT_ATTR_BACKGROUND, state->default_bg);
 }
 
-INTERNAL void fyvt_state_savepen(struct fyvt_state *state, int save)
+void fyvt_state_savepen(struct fyvt_state *state, int save)
 {
   if(save) {
     state->saved.pen = state->pen;
@@ -277,7 +277,7 @@ void fyvt_state_set_bold_highbright(struct fyvt_state *state, int bold_is_highbr
   state->bold_is_highbright = bold_is_highbright;
 }
 
-INTERNAL void fyvt_state_setpen(struct fyvt_state *state, const long args[], int argcount)
+void fyvt_state_setpen(struct fyvt_state *state, const long args[], int argcount)
 {
   // SGR - ECMA-48 8.3.117
 
@@ -522,7 +522,7 @@ static int fyvt_state_getpen_color(const union fyvt_color *col, int argi, long a
     return argi;
 }
 
-INTERNAL int fyvt_state_getpen(struct fyvt_state *state, long args[], int argcount UNUSED)
+int fyvt_state_getpen(struct fyvt_state *state, long args[], int argcount UNUSED)
 {
   int argi = 0;
 

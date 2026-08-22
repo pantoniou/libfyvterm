@@ -220,7 +220,7 @@ encodings[] = {
   { 0 },
 };
 
-/* This ought to be INTERNAL but isn't because it's used by unit testing */
+/* This ought to be but isn't because it's used by unit testing */
 struct fyvt_encoding *fyvt_lookup_encoding(enum fyvt_encoding_type type, char designation)
 {
   for(int i = 0; encodings[i].designation; i++)

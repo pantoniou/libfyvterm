@@ -256,7 +256,11 @@ int main(int argc, char *argv[])
     exit(1);
   }
 
-  vt = fyvt_new(rows, cols);
+  vt = fyvt_create(&(struct fyvt_cfg){
+      .struct_size = sizeof(struct fyvt_cfg),
+      .rows = rows,
+      .cols = cols,
+    });
   fyvt_set_utf8(vt, true);
 
   vts = fyvt_obtain_screen(vt);
@@ -276,7 +280,7 @@ int main(int argc, char *argv[])
 
   close(fd);
 
-  fyvt_free(vt);
+  fyvt_destroy(vt);
 
   return 0;
 }

@@ -941,7 +941,7 @@ static struct fyvt_screen *screen_new(struct fyvt *vt)
   return screen;
 }
 
-INTERNAL void fyvt_screen_free(struct fyvt_screen *screen)
+void fyvt_screen_free(struct fyvt_screen *screen)
 {
   fyvt_allocator_free(screen->vt, screen->buffers[BUFIDX_PRIMARY]);
   if(screen->buffers[BUFIDX_ALTSCREEN])
