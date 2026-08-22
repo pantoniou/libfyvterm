@@ -268,6 +268,7 @@ typedef enum {
   VTERM_PROP_CURSORSHAPE,       // number
   VTERM_PROP_MOUSE,             // number
   VTERM_PROP_FOCUSREPORT,       // bool
+  VTERM_PROP_THEMEUPDATES,      // bool
   VTERM_PROP_SYNCOUTPUT,        // bool
 
   VTERM_N_PROPS
@@ -444,6 +445,7 @@ typedef struct {
   int (*settermprop)(VTermProp prop, VTermValue *val, void *user);
   int (*bell)(void *user);
   int (*resize)(int rows, int cols, VTermStateFields *fields, void *user);
+  int (*theme)(bool *dark, void *user);
   int (*setlineinfo)(int row, const VTermLineInfo *newinfo, const VTermLineInfo *oldinfo, void *user);
   int (*sb_clear)(void *user);
   // ABI-compat only enabled if vterm_state_callbacks_has_premove() is invoked
@@ -553,6 +555,7 @@ typedef struct {
   int (*settermprop)(VTermProp prop, VTermValue *val, void *user);
   int (*bell)(void *user);
   int (*resize)(int rows, int cols, void *user);
+  int (*theme)(bool *dark, void *user);
   int (*sb_pushline)(int cols, const VTermScreenCell *cells, void *user);
   int (*sb_popline)(int cols, VTermScreenCell *cells, void *user);
   int (*sb_clear)(void* user);

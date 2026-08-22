@@ -862,6 +862,20 @@ static int setlineinfo(int row, const VTermLineInfo *newinfo, const VTermLineInf
   return 1;
 }
 
+/* Neovim carries this callback here (upstream commit f1c45fc7a4,
+ * "feat(terminal): support theme update notifications (DEC mode 2031)"):
+ * bridges the state layer's theme query to the screen layer's own
+ * callbacks. */
+static int theme(bool *dark, void *user)
+{
+  VTermScreen *screen = user;
+
+  if(screen->callbacks && screen->callbacks->theme)
+    return (*screen->callbacks->theme)(dark, screen->cbdata);
+
+  return 1;
+}
+
 static int sb_clear(void *user) {
   VTermScreen *screen = user;
 
@@ -882,6 +896,7 @@ static VTermStateCallbacks state_cbs = {
   .settermprop = &settermprop,
   .bell        = &bell,
   .resize      = &resize,
+  .theme       = &theme,
   .setlineinfo = &setlineinfo,
   .sb_clear    = &sb_clear,
 };

@@ -885,6 +885,10 @@ static void set_dec_mode(VTermState *state, int num, int val)
     settermprop_bool(state, VTERM_PROP_SYNCOUTPUT, val);
     break;
 
+  case 2031: // Theme update notifications
+    settermprop_bool(state, VTERM_PROP_THEMEUPDATES, val);
+    break;
+
   default:
     DEBUG_LOG("libvterm: Unknown DEC mode %d\n", num);
     return;
@@ -962,6 +966,10 @@ static void request_dec_mode(VTermState *state, int num)
 
     case 2026:
       reply = state->mode.synchronized_output;
+      break;
+
+    case 2031:
+      reply = state->mode.theme_updates;
       break;
 
     default:
@@ -1434,6 +1442,10 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
 
     {
       char *qmark = (leader_byte == '?') ? "?" : "";
+      /* Neovim carries a theme query here (upstream commit f1c45fc7a4,
+       * "feat(terminal): support theme update notifications (DEC mode
+       * 2031)"). */
+      bool dark = false;
 
       switch(val) {
       case 0: case 1: case 2: case 3: case 4:
@@ -1444,6 +1456,12 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
         break;
       case 6: // CPR - cursor position report
         vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "%s%d;%dR", qmark, state->pos.row + 1, state->pos.col + 1);
+        break;
+      case 996: // XTQTHEME - query the color scheme
+        if(state->callbacks && state->callbacks->theme) {
+          if(state->callbacks->theme(&dark, state->cbdata))
+            vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?997;%cn", dark ? '1' : '2');
+        }
         break;
       }
     }
@@ -2293,6 +2311,9 @@ int vterm_state_set_termprop(VTermState *state, VTermProp prop, VTermValue *val)
     return 1;
   case VTERM_PROP_FOCUSREPORT:
     state->mode.report_focus = val->boolean;
+    return 1;
+  case VTERM_PROP_THEMEUPDATES:
+    state->mode.theme_updates = val->boolean;
     return 1;
   case VTERM_PROP_SYNCOUTPUT:
     state->mode.synchronized_output = val->boolean;
