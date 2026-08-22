@@ -997,6 +997,12 @@ int vterm_screen_get_cell(const VTermScreen *screen, VTermPos pos, VTermScreenCe
     if(!intcell->chars[i])
       break;
   }
+  /* Neovim carries a crash fix here (upstream commit f8c8a245aa, "fix
+   * (terminal): don't crash on unprintable chars"): a gap cell behind a
+   * double-width glyph carries the (uint32_t)-1 sentinel in chars[0], which
+   * must not leak out to a caller as though it were a codepoint. */
+  if(cell->chars[0] == (uint32_t)-1)
+    cell->chars[0] = 0;
 
   cell->attrs.bold      = intcell->pen.bold;
   cell->attrs.underline = intcell->pen.underline;
