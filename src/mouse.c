@@ -1,4 +1,4 @@
-#include "vterm_internal.h"
+#include "fyvt_internal.h"
 
 #include "utf8.h"
 
@@ -14,7 +14,7 @@ static int lowest_set_bit(unsigned int x)
   return i;
 }
 
-static void output_mouse(VTermState *state, int code, int pressed, int modifiers, int col, int row)
+static void output_mouse(struct fyvt_state *state, int code, int pressed, int modifiers, int col, int row)
 {
   modifiers <<= 2;
 
@@ -33,7 +33,7 @@ static void output_mouse(VTermState *state, int code, int pressed, int modifiers
     if(code & 0x80)
       break;
 
-    vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "M%c%c%c",
+    fyvt_push_output_sprintf_ctrl(state->vt, C1_CSI, "M%c%c%c",
         (code | modifiers) + 0x20, col + 0x21, row + 0x21);
     break;
 
@@ -49,12 +49,12 @@ static void output_mouse(VTermState *state, int code, int pressed, int modifiers
       len += fill_utf8(row + 0x21, utf8 + len);
       utf8[len] = 0;
 
-      vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "M%s", utf8);
+      fyvt_push_output_sprintf_ctrl(state->vt, C1_CSI, "M%s", utf8);
     }
     break;
 
   case MOUSE_SGR:
-    vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "<%d;%d;%d%c",
+    fyvt_push_output_sprintf_ctrl(state->vt, C1_CSI, "<%d;%d;%d%c",
         code | modifiers, col + 1, row + 1, pressed ? 'M' : 'm');
     break;
 
@@ -62,15 +62,15 @@ static void output_mouse(VTermState *state, int code, int pressed, int modifiers
     if(!pressed)
       code = 3;
 
-    vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "%d;%d;%dM",
+    fyvt_push_output_sprintf_ctrl(state->vt, C1_CSI, "%d;%d;%dM",
         code | modifiers, col + 1, row + 1);
     break;
   }
 }
 
-void vterm_mouse_move(VTerm *vt, int row, int col, VTermModifier mod)
+void fyvt_mouse_move(struct fyvt *vt, int row, int col, enum fyvt_modifier mod)
 {
-  VTermState *state = vt->state;
+  struct fyvt_state *state = vt->state;
 
   if(col == state->mouse_col && row == state->mouse_row)
     return;
@@ -98,9 +98,9 @@ void vterm_mouse_move(VTerm *vt, int row, int col, VTermModifier mod)
   }
 }
 
-void vterm_mouse_button(VTerm *vt, int button, bool pressed, VTermModifier mod)
+void fyvt_mouse_button(struct fyvt *vt, int button, bool pressed, enum fyvt_modifier mod)
 {
-  VTermState *state = vt->state;
+  struct fyvt_state *state = vt->state;
 
   int old_buttons = state->mouse_buttons;
 

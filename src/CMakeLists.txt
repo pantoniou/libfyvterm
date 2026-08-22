@@ -24,7 +24,7 @@ set(_fyvterm_sources
     screen.c
     state.c
     unicode.c
-    vterm.c
+    fyvt.c
 )
 
 set(_fyvterm_incdir ${PROJECT_SOURCE_DIR}/include)
@@ -47,18 +47,15 @@ unset(CMAKE_REQUIRED_FLAGS)
 foreach(_t fyvterm fyvterm_static)
     target_include_directories(${_t} PUBLIC
         "$<BUILD_INTERFACE:${_fyvterm_incdir}>"
-        "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/libfyvterm>")
+        "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
     target_include_directories(${_t} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_compile_definitions(${_t} PRIVATE
         "FYVT_VERSION_STRING=\"${PROJECT_VERSION}\"")
     target_compile_definitions(${_t} PRIVATE "$<$<CONFIG:Debug>:DEBUG>")
     if(CMAKE_C_COMPILER_ID MATCHES GNU|Clang)
-        # Hidden-by-default visibility is enabled together with the
-        # FYVT_EXPORT tags on the public entry points; until every entry
-        # point carries one, hiding them would break every consumer.
-        if(FYVTERM_PUBLIC_SYMBOLS_TAGGED)
-            target_compile_options(${_t} PRIVATE -fvisibility=hidden)
-        endif()
+        # Hidden by default: only the FYVT_EXPORT-tagged entry points in
+        # the public headers reach the ABI. CI asserts this with nm.
+        target_compile_options(${_t} PRIVATE -fvisibility=hidden)
         if(FYVTERM_HAVE_EXCLUDE_LIBS)
             target_link_options(${_t} PRIVATE "-Wl,--exclude-libs,ALL")
         endif()
@@ -89,13 +86,12 @@ install(TARGETS fyvterm fyvterm_static
     LIBRARY  DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE  DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME  DESTINATION ${CMAKE_INSTALL_BINDIR})
-# Headers go under their own directory: a flat vterm.h would overwrite a
-# system libvterm's header. The public layout becomes
-# <libfyvterm.h> + <libfyvterm/...> once the API is renamed.
-install(FILES
-    ${_fyvterm_incdir}/vterm.h
-    ${_fyvterm_incdir}/vterm_keycodes.h
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libfyvterm)
+# <libfyvterm.h> plus the libfyvterm/ directory it includes. Nothing lands
+# at a name a system libvterm also installs.
+install(FILES ${_fyvterm_incdir}/libfyvterm.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY ${_fyvterm_incdir}/libfyvterm
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libfyvterm.pc
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 

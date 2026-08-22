@@ -6,7 +6,7 @@
 #include <getopt.h>
 #include <unistd.h>
 
-#include "vterm.h"
+#include <libfyvterm.h>
 
 #include "../src/utf8.h" // fill_utf8
 
@@ -24,8 +24,8 @@
 
 #define streq(a,b) (!strcmp(a,b))
 
-static VTerm *vt;
-static VTermScreen *vts;
+static struct fyvt *vt;
+static struct fyvt_screen *vts;
 
 static int cols;
 static int rows;
@@ -35,20 +35,20 @@ static enum {
   FORMAT_SGR,
 } format = FORMAT_PLAIN;
 
-static int dump_cell_color(const VTermColor *col, int sgri, int sgr[], int fg)
+static int dump_cell_color(const union fyvt_color *col, int sgri, int sgr[], int fg)
 {
     /* Reset the color if the given color is the default color */
-    if (fg && VTERM_COLOR_IS_DEFAULT_FG(col)) {
+    if (fg && FYVT_COLOR_IS_DEFAULT_FG(col)) {
         sgr[sgri++] = 39;
         return sgri;
     }
-    if (!fg && VTERM_COLOR_IS_DEFAULT_BG(col)) {
+    if (!fg && FYVT_COLOR_IS_DEFAULT_BG(col)) {
         sgr[sgri++] = 49;
         return sgri;
     }
 
     /* Decide whether to send an indexed color or an RGB color */
-    if (VTERM_COLOR_IS_INDEXED(col)) {
+    if (FYVT_COLOR_IS_INDEXED(col)) {
         const uint8_t idx = col->indexed.idx;
         if (idx < 8) {
             sgr[sgri++] = (idx + (fg ? 30 : 40));
@@ -62,7 +62,7 @@ static int dump_cell_color(const VTermColor *col, int sgri, int sgr[], int fg)
             sgr[sgri++] = idx;
         }
     }
-    else if (VTERM_COLOR_IS_RGB(col)) {
+    else if (FYVT_COLOR_IS_RGB(col)) {
         sgr[sgri++] = (fg ? 38 : 48);
         sgr[sgri++] = 2;
         sgr[sgri++] = col->rgb.red;
@@ -72,7 +72,7 @@ static int dump_cell_color(const VTermColor *col, int sgri, int sgr[], int fg)
     return sgri;
 }
 
-static void dump_cell(const VTermScreenCell *cell, const VTermScreenCell *prevcell)
+static void dump_cell(const struct fyvt_screen_cell *cell, const struct fyvt_screen_cell *prevcell)
 {
   switch(format) {
     case FORMAT_PLAIN:
@@ -123,11 +123,11 @@ static void dump_cell(const VTermScreenCell *cell, const VTermScreenCell *prevce
         if(prevcell->attrs.font && !cell->attrs.font)
           sgr[sgri++] = 10;
 
-        if(!vterm_color_is_equal(&prevcell->fg, &cell->fg)) {
+        if(!fyvt_color_is_equal(&prevcell->fg, &cell->fg)) {
           sgri = dump_cell_color(&cell->fg, sgri, sgr, 1);
         }
 
-        if(!vterm_color_is_equal(&prevcell->bg, &cell->bg)) {
+        if(!fyvt_color_is_equal(&prevcell->bg, &cell->bg)) {
           sgri = dump_cell_color(&cell->bg, sgri, sgr, 0);
         }
 
@@ -145,14 +145,14 @@ static void dump_cell(const VTermScreenCell *cell, const VTermScreenCell *prevce
       break;
   }
 
-  for(int i = 0; i < VTERM_MAX_CHARS_PER_CELL && cell->chars[i]; i++) {
+  for(int i = 0; i < FYVT_MAX_CHARS_PER_CELL && cell->chars[i]; i++) {
     char bytes[6];
     bytes[fill_utf8(cell->chars[i], bytes)] = 0;
     printf("%s", bytes);
   }
 }
 
-static void dump_eol(const VTermScreenCell *prevcell)
+static void dump_eol(const struct fyvt_screen_cell *prevcell)
 {
   switch(format) {
     case FORMAT_PLAIN:
@@ -170,13 +170,13 @@ static void dump_eol(const VTermScreenCell *prevcell)
 
 void dump_row(int row)
 {
-  VTermPos pos = { .row = row, .col = 0 };
-  VTermScreenCell prevcell = { 0 };
-  vterm_state_get_default_colors(vterm_obtain_state(vt), &prevcell.fg, &prevcell.bg);
+  struct fyvt_pos pos = { .row = row, .col = 0 };
+  struct fyvt_screen_cell prevcell = { 0 };
+  fyvt_state_get_default_colors(fyvt_obtain_state(vt), &prevcell.fg, &prevcell.bg);
 
   while(pos.col < cols) {
-    VTermScreenCell cell;
-    vterm_screen_get_cell(vts, pos, &cell);
+    struct fyvt_screen_cell cell;
+    fyvt_screen_get_cell(vts, pos, &cell);
 
     dump_cell(&cell, &prevcell);
 
@@ -187,11 +187,11 @@ void dump_row(int row)
   dump_eol(&prevcell);
 }
 
-static int screen_sb_pushline(int cols, const VTermScreenCell *cells, void *user)
+static int screen_sb_pushline(int cols, const struct fyvt_screen_cell *cells, void *user)
 {
   (void)user;
-  VTermScreenCell prevcell = { 0 };
-  vterm_state_get_default_colors(vterm_obtain_state(vt), &prevcell.fg, &prevcell.bg);
+  struct fyvt_screen_cell prevcell = { 0 };
+  fyvt_state_get_default_colors(fyvt_obtain_state(vt), &prevcell.fg, &prevcell.bg);
 
   for(int col = 0; col < cols; col++) {
     dump_cell(cells + col, &prevcell);
@@ -211,7 +211,7 @@ static int screen_resize(int new_rows, int new_cols, void *user)
   return 1;
 }
 
-static VTermScreenCallbacks cb_screen = {
+static struct fyvt_screen_callbacks cb_screen = {
   .sb_pushline = &screen_sb_pushline,
   .resize      = &screen_resize,
 };
@@ -256,18 +256,18 @@ int main(int argc, char *argv[])
     exit(1);
   }
 
-  vt = vterm_new(rows, cols);
-  vterm_set_utf8(vt, true);
+  vt = fyvt_new(rows, cols);
+  fyvt_set_utf8(vt, true);
 
-  vts = vterm_obtain_screen(vt);
-  vterm_screen_set_callbacks(vts, &cb_screen, NULL);
+  vts = fyvt_obtain_screen(vt);
+  fyvt_screen_set_callbacks(vts, &cb_screen, NULL);
 
-  vterm_screen_reset(vts, 1);
+  fyvt_screen_reset(vts, 1);
 
   int len;
   char buffer[1024];
   while((len = read(fd, buffer, sizeof(buffer))) > 0) {
-    vterm_input_write(vt, buffer, len);
+    fyvt_input_write(vt, buffer, len);
   }
 
   for(int row = 0; row < rows; row++) {
@@ -276,7 +276,7 @@ int main(int argc, char *argv[])
 
   close(fd);
 
-  vterm_free(vt);
+  fyvt_free(vt);
 
   return 0;
 }

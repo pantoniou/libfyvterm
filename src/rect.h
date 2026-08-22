@@ -1,12 +1,12 @@
 /*
- * Some utility functions on VTermRect structures
+ * Some utility functions on struct fyvt_rect structures
  */
 
 #define STRFrect "(%d,%d-%d,%d)"
 #define ARGSrect(r) (r).start_row, (r).start_col, (r).end_row, (r).end_col
 
 /* Expand dst to contain src as well */
-static void rect_expand(VTermRect *dst, VTermRect *src)
+static void rect_expand(struct fyvt_rect *dst, struct fyvt_rect *src)
 {
   if(dst->start_row > src->start_row) dst->start_row = src->start_row;
   if(dst->start_col > src->start_col) dst->start_col = src->start_col;
@@ -15,7 +15,7 @@ static void rect_expand(VTermRect *dst, VTermRect *src)
 }
 
 /* Clip the dst to ensure it does not step outside of bounds */
-static void rect_clip(VTermRect *dst, VTermRect *bounds)
+static void rect_clip(struct fyvt_rect *dst, struct fyvt_rect *bounds)
 {
   if(dst->start_row < bounds->start_row) dst->start_row = bounds->start_row;
   if(dst->start_col < bounds->start_col) dst->start_col = bounds->start_col;
@@ -27,7 +27,7 @@ static void rect_clip(VTermRect *dst, VTermRect *bounds)
 }
 
 /* True if the two rectangles are equal */
-static int rect_equal(VTermRect *a, VTermRect *b)
+static int rect_equal(struct fyvt_rect *a, struct fyvt_rect *b)
 {
   return (a->start_row == b->start_row) &&
          (a->start_col == b->start_col) &&
@@ -36,7 +36,7 @@ static int rect_equal(VTermRect *a, VTermRect *b)
 }
 
 /* True if small is contained entirely within big */
-static int rect_contains(VTermRect *big, VTermRect *small)
+static int rect_contains(struct fyvt_rect *big, struct fyvt_rect *small)
 {
   if(small->start_row < big->start_row) return 0;
   if(small->start_col < big->start_col) return 0;
@@ -46,7 +46,7 @@ static int rect_contains(VTermRect *big, VTermRect *small)
 }
 
 /* True if the rectangles overlap at all */
-static int rect_intersects(VTermRect *a, VTermRect *b)
+static int rect_intersects(struct fyvt_rect *a, struct fyvt_rect *b)
 {
   if(a->start_row > b->end_row || b->start_row > a->end_row)
     return 0;

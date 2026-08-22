@@ -1,7 +1,7 @@
 #ifndef __VTERM_INTERNAL_H__
 #define __VTERM_INTERNAL_H__
 
-#include "vterm.h"
+#include <libfyvterm.h>
 
 #include <stdarg.h>
 
@@ -58,19 +58,19 @@
 #define KEY_ENCODING_REPORT_ALL_KEYS    0x8
 #define KEY_ENCODING_REPORT_ASSOCIATED  0x10
 
-typedef struct VTermEncoding VTermEncoding;
+struct fyvt_encoding;
 
-typedef struct {
-  VTermEncoding *enc;
+struct fyvt_encoding_instance {
+  struct fyvt_encoding *enc;
 
   // This size should be increased if required by other stateful encodings
   char           data[4*sizeof(uint32_t)];
-} VTermEncodingInstance;
+};
 
-struct VTermPen
+struct fyvt_pen
 {
-  VTermColor fg;
-  VTermColor bg;
+  union fyvt_color fg;
+  union fyvt_color bg;
   unsigned int bold:1;
   unsigned int underline:2;
   unsigned int italic:1;
@@ -85,36 +85,36 @@ struct VTermPen
   unsigned int overline:1;
 };
 
-typedef struct {
+struct fyvt_key_encoding_flags {
   bool disambiguate:1;
   bool report_events:1;
   bool report_alternate:1;
   bool report_all_keys:1;
   bool report_associated:1;
-} VTermKeyEncodingFlags;
+};
 
-struct VTermKeyEncodingStack {
-  VTermKeyEncodingFlags items[16];
+struct fyvt_key_encoding_stack {
+  struct fyvt_key_encoding_flags items[16];
   uint8_t size; /* Number of items in the stack: at least 1, at most
                  * ARRAY_SIZE(items). */
 };
 
-struct VTermState
+struct fyvt_state
 {
-  VTerm *vt;
+  struct fyvt *vt;
 
-  const VTermStateCallbacks *callbacks;
+  const struct fyvt_state_callbacks *callbacks;
   void *cbdata;
   bool callbacks_has_premove;
 
-  const VTermStateFallbacks *fallbacks;
+  const struct fyvt_state_fallbacks *fallbacks;
   void *fbdata;
 
   int rows;
   int cols;
 
   /* Current cursor position */
-  VTermPos pos;
+  struct fyvt_pos pos;
 
   int at_phantom; /* True if we're on the "81st" phantom column to defer a wraparound */
 
@@ -130,10 +130,10 @@ struct VTermState
   unsigned char *tabstops;
 
   /* Primary and Altscreen; lineinfos[1] is lazily allocated as needed */
-  VTermLineInfo *lineinfos[2];
+  struct fyvt_line_info *lineinfos[2];
 
   /* lineinfo will == lineinfos[0] or lineinfos[1], depending on altscreen */
-  VTermLineInfo *lineinfo;
+  struct fyvt_line_info *lineinfo;
 #define ROWWIDTH(state,row) ((state)->lineinfo[(row)].doublewidth ? ((state)->cols / 2) : (state)->cols)
 #define THISROWWIDTH(state) ROWWIDTH(state, (state)->pos.row)
 
@@ -151,7 +151,7 @@ struct VTermState
   uint32_t *combine_chars;
   size_t combine_chars_size; // Number of ELEMENTS in the above
   int combine_width; // The width of the glyph above
-  VTermPos combine_pos;   // Position before movement
+  struct fyvt_pos combine_pos;   // Position before movement
 
   struct {
     unsigned int keypad:1;
@@ -172,14 +172,14 @@ struct VTermState
     unsigned int synchronized_output:1;
   } mode;
 
-  VTermEncodingInstance encoding[4], encoding_utf8;
+  struct fyvt_encoding_instance encoding[4], encoding_utf8;
   int gl_set, gr_set, gsingle_set;
 
-  struct VTermPen pen;
+  struct fyvt_pen pen;
 
-  VTermColor default_fg;
-  VTermColor default_bg;
-  VTermColor colors[16]; // Store the 8 ANSI and the 8 ANSI high-brights only
+  union fyvt_color default_fg;
+  union fyvt_color default_bg;
+  union fyvt_color colors[16]; // Store the 8 ANSI and the 8 ANSI high-brights only
 
   int bold_is_highbright;
 
@@ -187,8 +187,8 @@ struct VTermState
 
   /* Saved state under DEC mode 1048/1049 */
   struct {
-    VTermPos pos;
-    struct VTermPen pen;
+    struct fyvt_pos pos;
+    struct fyvt_pen pen;
 
     struct {
       unsigned int cursor_visible:1;
@@ -216,7 +216,7 @@ struct VTermState
   } tmp;
 
   struct {
-    const VTermSelectionCallbacks *callbacks;
+    const struct fyvt_selection_callbacks *callbacks;
     void *user;
     char *buffer;
     size_t buflen;
@@ -227,12 +227,12 @@ struct VTermState
 
   /* Kitty keyboard protocol flag stack: one for the primary screen, one for
    * the altscreen. */
-  struct VTermKeyEncodingStack key_encoding_stacks[2];
+  struct fyvt_key_encoding_stack key_encoding_stacks[2];
 };
 
-struct VTerm
+struct fyvt
 {
-  const VTermAllocatorFunctions *allocator;
+  const struct fyvt_allocator *allocator;
   void *allocdata;
 
   int rows;
@@ -244,7 +244,7 @@ struct VTerm
   } mode;
 
   struct {
-    enum VTermParserState {
+    enum fyvt_parser_state {
       NORMAL,
       CSI_LEADER,
       CSI_ARGS,
@@ -281,7 +281,7 @@ struct VTerm
       } dcs;
     } v;
 
-    const VTermParserCallbacks *callbacks;
+    const struct fyvt_parser_callbacks *callbacks;
     void *cbdata;
 
     bool string_initial;
@@ -291,7 +291,7 @@ struct VTerm
 
   /* len == malloc()ed size; cur == number of valid bytes */
 
-  VTermOutputCallback *outfunc;
+  fyvt_output_callback *outfunc;
   void                *outdata;
 
   char  *outbuffer;
@@ -301,38 +301,38 @@ struct VTerm
   char  *tmpbuffer;
   size_t tmpbuffer_len;
 
-  VTermState *state;
-  VTermScreen *screen;
+  struct fyvt_state *state;
+  struct fyvt_screen *screen;
 };
 
-struct VTermEncoding {
-  void (*init) (VTermEncoding *enc, void *data);
-  void (*decode)(VTermEncoding *enc, void *data,
+struct fyvt_encoding {
+  void (*init) (struct fyvt_encoding *enc, void *data);
+  void (*decode)(struct fyvt_encoding *enc, void *data,
                  uint32_t cp[], int *cpi, int cplen,
                  const char bytes[], size_t *pos, size_t len);
 };
 
-typedef enum {
+enum fyvt_encoding_type {
   ENC_UTF8,
   ENC_SINGLE_94
-} VTermEncodingType;
+};
 
-void *vterm_allocator_malloc(VTerm *vt, size_t size);
-void  vterm_allocator_free(VTerm *vt, void *ptr);
+void *fyvt_allocator_malloc(struct fyvt *vt, size_t size);
+void  fyvt_allocator_free(struct fyvt *vt, void *ptr);
 
-void vterm_push_output_bytes(VTerm *vt, const char *bytes, size_t len);
-void vterm_push_output_vsprintf(VTerm *vt, const char *format, va_list args);
-void vterm_push_output_sprintf(VTerm *vt, const char *format, ...);
-void vterm_push_output_sprintf_ctrl(VTerm *vt, unsigned char ctrl, const char *fmt, ...);
-void vterm_push_output_sprintf_str(VTerm *vt, unsigned char ctrl, bool term, const char *fmt, ...);
+void fyvt_push_output_bytes(struct fyvt *vt, const char *bytes, size_t len);
+void fyvt_push_output_vsprintf(struct fyvt *vt, const char *format, va_list args);
+void fyvt_push_output_sprintf(struct fyvt *vt, const char *format, ...);
+void fyvt_push_output_sprintf_ctrl(struct fyvt *vt, unsigned char ctrl, const char *fmt, ...);
+void fyvt_push_output_sprintf_str(struct fyvt *vt, unsigned char ctrl, bool term, const char *fmt, ...);
 
-void vterm_state_free(VTermState *state);
+void fyvt_state_free(struct fyvt_state *state);
 
-void vterm_state_newpen(VTermState *state);
-void vterm_state_resetpen(VTermState *state);
-void vterm_state_setpen(VTermState *state, const long args[], int argcount);
-int  vterm_state_getpen(VTermState *state, long args[], int argcount);
-void vterm_state_savepen(VTermState *state, int save);
+void fyvt_state_newpen(struct fyvt_state *state);
+void fyvt_state_resetpen(struct fyvt_state *state);
+void fyvt_state_setpen(struct fyvt_state *state, const long args[], int argcount);
+int  fyvt_state_getpen(struct fyvt_state *state, long args[], int argcount);
+void fyvt_state_savepen(struct fyvt_state *state, int save);
 
 enum {
   C1_SS3 = 0x8f,
@@ -342,13 +342,13 @@ enum {
   C1_OSC = 0x9d,
 };
 
-void vterm_state_push_output_sprintf_CSI(VTermState *vts, const char *format, ...);
+void fyvt_state_push_output_sprintf_CSI(struct fyvt_state *vts, const char *format, ...);
 
-void vterm_screen_free(VTermScreen *screen);
+void fyvt_screen_free(struct fyvt_screen *screen);
 
-VTermEncoding *vterm_lookup_encoding(VTermEncodingType type, char designation);
+struct fyvt_encoding *fyvt_lookup_encoding(enum fyvt_encoding_type type, char designation);
 
-int vterm_unicode_width(uint32_t codepoint);
-int vterm_unicode_is_combining(uint32_t codepoint);
+int fyvt_unicode_width(uint32_t codepoint);
+int fyvt_unicode_is_combining(uint32_t codepoint);
 
 #endif

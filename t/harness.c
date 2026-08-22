@@ -1,5 +1,5 @@
-#include "vterm.h"
-#include "../src/vterm_internal.h" // We pull in some internal bits too
+#include <libfyvterm.h>
+#include "../src/fyvt_internal.h" // We pull in some internal bits too
 
 #include <assert.h>
 #include <stdio.h>
@@ -117,15 +117,15 @@ static size_t inplace_hex2bytes(char *s)
   return outpos - s;
 }
 
-static VTermModifier strpe_modifiers(char **strp)
+static enum fyvt_modifier strpe_modifiers(char **strp)
 {
-  VTermModifier state = 0;
+  enum fyvt_modifier state = 0;
 
   while((*strp)[0]) {
     switch(((*strp)++)[0]) {
-      case 'S': state |= VTERM_MOD_SHIFT; break;
-      case 'C': state |= VTERM_MOD_CTRL;  break;
-      case 'A': state |= VTERM_MOD_ALT;   break;
+      case 'S': state |= FYVT_MOD_SHIFT; break;
+      case 'C': state |= FYVT_MOD_CTRL;  break;
+      case 'A': state |= FYVT_MOD_ALT;   break;
       default: return state;
     }
   }
@@ -133,35 +133,35 @@ static VTermModifier strpe_modifiers(char **strp)
   return state;
 }
 
-static VTermKey strp_key(char *str)
+static enum fyvt_key strp_key(char *str)
 {
   static struct {
     char *name;
-    VTermKey key;
+    enum fyvt_key key;
   } keys[] = {
-    { "Up",    VTERM_KEY_UP },
-    { "Tab",   VTERM_KEY_TAB },
-    { "Enter", VTERM_KEY_ENTER },
-    { "KP0",   VTERM_KEY_KP_0 },
-    { "KP1",   VTERM_KEY_KP_1 },
-    { "KP2",   VTERM_KEY_KP_2 },
-    { "KP3",   VTERM_KEY_KP_3 },
-    { "KP4",   VTERM_KEY_KP_4 },
-    { "KP5",   VTERM_KEY_KP_5 },
-    { "KP6",   VTERM_KEY_KP_6 },
-    { "KP7",   VTERM_KEY_KP_7 },
-    { "KP8",   VTERM_KEY_KP_8 },
-    { "KP9",   VTERM_KEY_KP_9 },
-    { "KPMult",   VTERM_KEY_KP_MULT },
-    { "KPPlus",   VTERM_KEY_KP_PLUS },
-    { "KPComma",  VTERM_KEY_KP_COMMA },
-    { "KPMinus",  VTERM_KEY_KP_MINUS },
-    { "KPPeriod", VTERM_KEY_KP_PERIOD },
-    { "KPDivide", VTERM_KEY_KP_DIVIDE },
-    { "KPEnter",  VTERM_KEY_KP_ENTER },
-    { "KPEqual",  VTERM_KEY_KP_EQUAL },
-    { "F1",    VTERM_KEY_FUNCTION(1) },
-    { NULL,    VTERM_KEY_NONE },
+    { "Up",    FYVT_KEY_UP },
+    { "Tab",   FYVT_KEY_TAB },
+    { "Enter", FYVT_KEY_ENTER },
+    { "KP0",   FYVT_KEY_KP_0 },
+    { "KP1",   FYVT_KEY_KP_1 },
+    { "KP2",   FYVT_KEY_KP_2 },
+    { "KP3",   FYVT_KEY_KP_3 },
+    { "KP4",   FYVT_KEY_KP_4 },
+    { "KP5",   FYVT_KEY_KP_5 },
+    { "KP6",   FYVT_KEY_KP_6 },
+    { "KP7",   FYVT_KEY_KP_7 },
+    { "KP8",   FYVT_KEY_KP_8 },
+    { "KP9",   FYVT_KEY_KP_9 },
+    { "KPMult",   FYVT_KEY_KP_MULT },
+    { "KPPlus",   FYVT_KEY_KP_PLUS },
+    { "KPComma",  FYVT_KEY_KP_COMMA },
+    { "KPMinus",  FYVT_KEY_KP_MINUS },
+    { "KPPeriod", FYVT_KEY_KP_PERIOD },
+    { "KPDivide", FYVT_KEY_KP_DIVIDE },
+    { "KPEnter",  FYVT_KEY_KP_ENTER },
+    { "KPEqual",  FYVT_KEY_KP_EQUAL },
+    { "F1",    FYVT_KEY_FUNCTION(1) },
+    { NULL,    FYVT_KEY_NONE },
   };
 
   for(int i = 0; keys[i].name; i++) {
@@ -169,54 +169,54 @@ static VTermKey strp_key(char *str)
       return keys[i].key;
   }
 
-  return VTERM_KEY_NONE;
+  return FYVT_KEY_NONE;
 }
 
-static void print_color(const VTermColor *col)
+static void print_color(const union fyvt_color *col)
 {
-  if (VTERM_COLOR_IS_RGB(col)) {
+  if (FYVT_COLOR_IS_RGB(col)) {
     printf("rgb(%d,%d,%d", col->rgb.red, col->rgb.green, col->rgb.blue);
   }
-  else if (VTERM_COLOR_IS_INDEXED(col)) {
+  else if (FYVT_COLOR_IS_INDEXED(col)) {
     printf("idx(%d", col->indexed.idx);
   }
   else {
     printf("invalid(%d", col->type);
   }
-  if (VTERM_COLOR_IS_DEFAULT_FG(col)) {
+  if (FYVT_COLOR_IS_DEFAULT_FG(col)) {
     printf(",is_default_fg");
   }
-  if (VTERM_COLOR_IS_DEFAULT_BG(col)) {
+  if (FYVT_COLOR_IS_DEFAULT_BG(col)) {
     printf(",is_default_bg");
   }
   printf(")");
 }
 
-static VTermColor strpe_color(char **strp)
+static union fyvt_color strpe_color(char **strp)
 {
   uint8_t r, g, b, idx;
   int len = 0;
-  VTermColor col;
+  union fyvt_color col;
 
   if(sscanf(*strp, "rgb(%hhu,%hhu,%hhu)%n", &r, &g, &b, &len) == 3 && len > 0) {
     *strp += len;
-    vterm_color_rgb(&col, r, g, b);
+    fyvt_color_rgb(&col, r, g, b);
   }
   else if(sscanf(*strp, "idx(%hhu)%n", &idx, &len) == 1 && len > 0) {
     *strp += len;
-    vterm_color_indexed(&col, idx);
+    fyvt_color_indexed(&col, idx);
   }
   else
-    vterm_color_rgb(&col, 127, 127, 127);
+    fyvt_color_rgb(&col, 127, 127, 127);
 
   return col;
 }
 
-static VTerm *vt;
-static VTermState *state;
-static VTermScreen *screen;
+static struct fyvt *vt;
+static struct fyvt_state *state;
+static struct fyvt_screen *screen;
 
-static VTermEncodingInstance encoding;
+static struct fyvt_encoding_instance encoding;
 
 static void term_output(const char *s, size_t len, void *user UNUSED)
 {
@@ -301,7 +301,7 @@ static int parser_csi(const char *leader, const long args[], int argcount, const
   return 1;
 }
 
-static int parser_osc(int command, VTermStringFragment frag, void *user UNUSED)
+static int parser_osc(int command, struct fyvt_string_fragment frag, void *user UNUSED)
 {
   printf("osc ");
 
@@ -322,7 +322,7 @@ static int parser_osc(int command, VTermStringFragment frag, void *user UNUSED)
   return 1;
 }
 
-static int parser_dcs(const char *command, size_t commandlen, VTermStringFragment frag, void *user UNUSED)
+static int parser_dcs(const char *command, size_t commandlen, struct fyvt_string_fragment frag, void *user UNUSED)
 {
   printf("dcs ");
 
@@ -342,7 +342,7 @@ static int parser_dcs(const char *command, size_t commandlen, VTermStringFragmen
   return 1;
 }
 
-static int parser_apc(VTermStringFragment frag, void *user UNUSED)
+static int parser_apc(struct fyvt_string_fragment frag, void *user UNUSED)
 {
   printf("apc ");
 
@@ -359,7 +359,7 @@ static int parser_apc(VTermStringFragment frag, void *user UNUSED)
   return 1;
 }
 
-static int parser_pm(VTermStringFragment frag, void *user UNUSED)
+static int parser_pm(struct fyvt_string_fragment frag, void *user UNUSED)
 {
   printf("pm ");
 
@@ -376,7 +376,7 @@ static int parser_pm(VTermStringFragment frag, void *user UNUSED)
   return 1;
 }
 
-static int parser_sos(VTermStringFragment frag, void *user UNUSED)
+static int parser_sos(struct fyvt_string_fragment frag, void *user UNUSED)
 {
   printf("sos ");
 
@@ -393,7 +393,7 @@ static int parser_sos(VTermStringFragment frag, void *user UNUSED)
   return 1;
 }
 
-static VTermParserCallbacks parser_cbs = {
+static struct fyvt_parser_callbacks parser_cbs = {
   .text    = parser_text,
   .control = parser_control,
   .escape  = parser_escape,
@@ -405,7 +405,7 @@ static VTermParserCallbacks parser_cbs = {
   .sos     = parser_sos,
 };
 
-static VTermStateFallbacks fallbacks = {
+static struct fyvt_state_fallbacks fallbacks = {
   .control = parser_control,
   .csi     = parser_csi,
   .osc     = parser_osc,
@@ -418,8 +418,8 @@ static VTermStateFallbacks fallbacks = {
 /* These callbacks are shared by State and Screen */
 
 static int want_movecursor = 0;
-static VTermPos state_pos;
-static int movecursor(VTermPos pos, VTermPos oldpos UNUSED, int visible UNUSED, void *user UNUSED)
+static struct fyvt_pos state_pos;
+static int movecursor(struct fyvt_pos pos, struct fyvt_pos oldpos UNUSED, int visible UNUSED, void *user UNUSED)
 {
   state_pos = pos;
 
@@ -430,7 +430,7 @@ static int movecursor(VTermPos pos, VTermPos oldpos UNUSED, int visible UNUSED, 
 }
 
 static int want_premove = 0;
-static int premove(VTermRect rect, void *user UNUSED)
+static int premove(struct fyvt_rect rect, void *user UNUSED)
 {
   if(!want_premove)
     return 0;
@@ -442,7 +442,7 @@ static int premove(VTermRect rect, void *user UNUSED)
 }
 
 static int want_scrollrect = 0;
-static int scrollrect(VTermRect rect, int downward, int rightward, void *user UNUSED)
+static int scrollrect(struct fyvt_rect rect, int downward, int rightward, void *user UNUSED)
 {
   if(!want_scrollrect)
     return 0;
@@ -455,7 +455,7 @@ static int scrollrect(VTermRect rect, int downward, int rightward, void *user UN
 }
 
 static int want_moverect = 0;
-static int moverect(VTermRect dest, VTermRect src, void *user UNUSED)
+static int moverect(struct fyvt_rect dest, struct fyvt_rect src, void *user UNUSED)
 {
   if(!want_moverect)
     return 0;
@@ -468,30 +468,30 @@ static int moverect(VTermRect dest, VTermRect src, void *user UNUSED)
 }
 
 static int want_settermprop = 0;
-static int settermprop(VTermProp prop, VTermValue *val, void *user UNUSED)
+static int settermprop(enum fyvt_prop prop, union fyvt_value *val, void *user UNUSED)
 {
   if(!want_settermprop)
     return 1;
 
-  VTermValueType type = vterm_get_prop_type(prop);
+  enum fyvt_value_type type = fyvt_get_prop_type(prop);
   switch(type) {
-  case VTERM_VALUETYPE_BOOL:
+  case FYVT_VALUETYPE_BOOL:
     printf("settermprop %d %s\n", prop, val->boolean ? "true" : "false");
     return 1;
-  case VTERM_VALUETYPE_INT:
+  case FYVT_VALUETYPE_INT:
     printf("settermprop %d %d\n", prop, val->number);
     return 1;
-  case VTERM_VALUETYPE_STRING:
+  case FYVT_VALUETYPE_STRING:
     printf("settermprop %d %s\"%.*s\"%s\n", prop,
         val->string.initial ? "[" : "", val->string.len, val->string.str, val->string.final ? "]" : "");
     return 1;
-  case VTERM_VALUETYPE_COLOR:
+  case FYVT_VALUETYPE_COLOR:
     printf("settermprop %d ", prop);
     print_color(&val->color);
     printf("\n");
     return 1;
 
-  case VTERM_N_VALUETYPES:
+  case FYVT_N_VALUETYPES:
     return 0;
   }
 
@@ -501,13 +501,13 @@ static int settermprop(VTermProp prop, VTermValue *val, void *user UNUSED)
 /* These callbacks are for State */
 
 static int want_state_putglyph = 0;
-static int state_putglyph(VTermGlyphInfo *info, VTermPos pos, void *user UNUSED)
+static int state_putglyph(struct fyvt_glyph_info *info, struct fyvt_pos pos, void *user UNUSED)
 {
   if(!want_state_putglyph)
     return 1;
 
   printf("putglyph ");
-  for(int i = 0; i < VTERM_MAX_CHARS_PER_CELL && info->chars[i]; i++)
+  for(int i = 0; i < FYVT_MAX_CHARS_PER_CELL && info->chars[i]; i++)
     printf(i ? ",%x" : "%x", info->chars[i]);
   printf(" %d %d,%d", info->width, pos.row, pos.col);
   if(info->protected_cell)
@@ -522,7 +522,7 @@ static int state_putglyph(VTermGlyphInfo *info, VTermPos pos, void *user UNUSED)
 }
 
 static int want_state_erase = 0;
-static int state_erase(VTermRect rect, int selective, void *user UNUSED)
+static int state_erase(struct fyvt_rect rect, int selective, void *user UNUSED)
 {
   if(!want_state_erase)
     return 1;
@@ -547,63 +547,63 @@ static struct {
   int baseline;
   int dim;
   int overline;
-  VTermColor foreground;
-  VTermColor background;
+  union fyvt_color foreground;
+  union fyvt_color background;
 } state_pen;
-static int state_setpenattr(VTermAttr attr, VTermValue *val, void *user UNUSED)
+static int state_setpenattr(enum fyvt_attr attr, union fyvt_value *val, void *user UNUSED)
 {
   switch(attr) {
-  case VTERM_ATTR_BOLD:
+  case FYVT_ATTR_BOLD:
     state_pen.bold = val->boolean;
     break;
-  case VTERM_ATTR_DIM:
+  case FYVT_ATTR_DIM:
     state_pen.dim = val->boolean;
     break;
-  case VTERM_ATTR_OVERLINE:
+  case FYVT_ATTR_OVERLINE:
     state_pen.overline = val->boolean;
     break;
-  case VTERM_ATTR_UNDERLINE:
+  case FYVT_ATTR_UNDERLINE:
     state_pen.underline = val->number;
     break;
-  case VTERM_ATTR_ITALIC:
+  case FYVT_ATTR_ITALIC:
     state_pen.italic = val->boolean;
     break;
-  case VTERM_ATTR_BLINK:
+  case FYVT_ATTR_BLINK:
     state_pen.blink = val->boolean;
     break;
-  case VTERM_ATTR_REVERSE:
+  case FYVT_ATTR_REVERSE:
     state_pen.reverse = val->boolean;
     break;
-  case VTERM_ATTR_CONCEAL:
+  case FYVT_ATTR_CONCEAL:
     state_pen.conceal = val->boolean;
     break;
-  case VTERM_ATTR_STRIKE:
+  case FYVT_ATTR_STRIKE:
     state_pen.strike = val->boolean;
     break;
-  case VTERM_ATTR_FONT:
+  case FYVT_ATTR_FONT:
     state_pen.font = val->number;
     break;
-  case VTERM_ATTR_SMALL:
+  case FYVT_ATTR_SMALL:
     state_pen.small = val->boolean;
     break;
-  case VTERM_ATTR_BASELINE:
+  case FYVT_ATTR_BASELINE:
     state_pen.baseline = val->number;
     break;
-  case VTERM_ATTR_FOREGROUND:
+  case FYVT_ATTR_FOREGROUND:
     state_pen.foreground = val->color;
     break;
-  case VTERM_ATTR_BACKGROUND:
+  case FYVT_ATTR_BACKGROUND:
     state_pen.background = val->color;
     break;
 
-  case VTERM_N_ATTRS:
+  case FYVT_N_ATTRS:
     return 0;
   }
 
   return 1;
 }
 
-static int state_setlineinfo(int row UNUSED, const VTermLineInfo *newinfo UNUSED, const VTermLineInfo *oldinfo UNUSED, void *user UNUSED)
+static int state_setlineinfo(int row UNUSED, const struct fyvt_line_info *newinfo UNUSED, const struct fyvt_line_info *oldinfo UNUSED, void *user UNUSED)
 {
   return 1;
 }
@@ -617,7 +617,7 @@ static int state_sb_clear(void *user UNUSED) {
   return 0;
 }
 
-VTermStateCallbacks state_cbs = {
+struct fyvt_state_callbacks state_cbs = {
   .putglyph    = state_putglyph,
   .movecursor  = movecursor,
   .premove     = premove,
@@ -630,7 +630,7 @@ VTermStateCallbacks state_cbs = {
   .sb_clear    = state_sb_clear,
 };
 
-static int selection_set(VTermSelectionMask mask, VTermStringFragment frag, void *user UNUSED)
+static int selection_set(enum fyvt_selection_mask mask, struct fyvt_string_fragment frag, void *user UNUSED)
 {
   printf("selection-set mask=%04X ", mask);
   if(frag.initial)
@@ -643,21 +643,21 @@ static int selection_set(VTermSelectionMask mask, VTermStringFragment frag, void
   return 1;
 }
 
-static int selection_query(VTermSelectionMask mask, void *user UNUSED)
+static int selection_query(enum fyvt_selection_mask mask, void *user UNUSED)
 {
   printf("selection-query mask=%04X\n", mask);
 
   return 1;
 }
 
-VTermSelectionCallbacks selection_cbs = {
+struct fyvt_selection_callbacks selection_cbs = {
   .set   = selection_set,
   .query = selection_query,
 };
 
 static int want_screen_damage = 0;
 static int want_screen_damage_cells = 0;
-static int screen_damage(VTermRect rect, void *user UNUSED)
+static int screen_damage(struct fyvt_rect rect, void *user UNUSED)
 {
   if(!want_screen_damage)
     return 1;
@@ -671,8 +671,8 @@ static int screen_damage(VTermRect rect, void *user UNUSED)
     for(int row = rect.start_row; row < rect.end_row; row++) {
       int eol = rect.end_col;
       while(eol > rect.start_col) {
-        VTermScreenCell cell;
-        vterm_screen_get_cell(screen, (VTermPos) { .row = row, .col = eol-1 }, &cell);
+        struct fyvt_screen_cell cell;
+        fyvt_screen_get_cell(screen, (struct fyvt_pos) { .row = row, .col = eol-1 }, &cell);
         if(cell.chars[0])
           break;
 
@@ -687,8 +687,8 @@ static int screen_damage(VTermRect rect, void *user UNUSED)
 
       printf(" %d<", row);
       for(int col = rect.start_col; col < eol; col++) {
-        VTermScreenCell cell;
-        vterm_screen_get_cell(screen, (VTermPos) { .row = row, .col = col }, &cell);
+        struct fyvt_screen_cell cell;
+        fyvt_screen_get_cell(screen, (struct fyvt_pos) { .row = row, .col = col }, &cell);
         printf(col == rect.start_col ? "%02X" : " %02X", cell.chars[0]);
       }
       printf(">");
@@ -701,7 +701,7 @@ static int screen_damage(VTermRect rect, void *user UNUSED)
 }
 
 static int want_screen_scrollback = 0;
-static int screen_sb_pushline4(int cols, const VTermScreenCell *cells, bool continuation, void *user UNUSED)
+static int screen_sb_pushline4(int cols, const struct fyvt_screen_cell *cells, bool continuation, void *user UNUSED)
 {
   if(!want_screen_scrollback)
     return 1;
@@ -718,7 +718,7 @@ static int screen_sb_pushline4(int cols, const VTermScreenCell *cells, bool cont
   return 1;
 }
 
-static int screen_sb_popline(int cols, VTermScreenCell *cells, void *user UNUSED)
+static int screen_sb_popline(int cols, struct fyvt_screen_cell *cells, void *user UNUSED)
 {
   if(!want_screen_scrollback)
     return 0;
@@ -746,7 +746,7 @@ static int screen_sb_clear(void *user UNUSED)
   return 0;
 }
 
-VTermScreenCallbacks screen_cbs = {
+struct fyvt_screen_callbacks screen_cbs = {
   .damage       = screen_damage,
   .moverect     = moverect,
   .movecursor   = movecursor,
@@ -774,28 +774,28 @@ int harness_command(const char *cmdline)
 
     if(streq(line, "INIT")) {
       if(!vt)
-        vt = vterm_new(25, 80);
+        vt = fyvt_new(25, 80);
 
-      vterm_output_set_callback(vt, term_output, NULL);
+      fyvt_output_set_callback(vt, term_output, NULL);
     }
 
     else if(streq(line, "WANTPARSER")) {
       assert(vt);
-      vterm_parser_set_callbacks(vt, &parser_cbs, NULL);
+      fyvt_parser_set_callbacks(vt, &parser_cbs, NULL);
     }
 
     else if(strstartswith(line, "WANTSTATE") && (line[9] == '\0' || line[9] == ' ')) {
       assert(vt);
       if(!state) {
-        state = vterm_obtain_state(vt);
-        vterm_state_set_callbacks(state, &state_cbs, NULL);
-        vterm_state_callbacks_has_premove(state);
+        state = fyvt_obtain_state(vt);
+        fyvt_state_set_callbacks(state, &state_cbs, NULL);
+        fyvt_state_callbacks_has_premove(state);
         /* In some tests we want to check the behaviour of overflowing the
          * buffer, so make it nicely small
          */
-        vterm_state_set_selection_callbacks(state, &selection_cbs, NULL, NULL, 16);
-        vterm_state_set_bold_highbright(state, 1);
-        vterm_state_reset(state, 1);
+        fyvt_state_set_selection_callbacks(state, &selection_cbs, NULL, NULL, 16);
+        fyvt_state_set_bold_highbright(state, 1);
+        fyvt_state_reset(state, 1);
       }
 
       int i = 9;
@@ -829,7 +829,7 @@ int harness_command(const char *cmdline)
           want_settermprop = sense;
           break;
         case 'f':
-          vterm_state_set_unrecognised_fallbacks(state, sense ? &fallbacks : NULL, NULL);
+          fyvt_state_set_unrecognised_fallbacks(state, sense ? &fallbacks : NULL, NULL);
           break;
         case 'b':
           want_state_scrollback = sense;
@@ -842,9 +842,9 @@ int harness_command(const char *cmdline)
     else if(strstartswith(line, "WANTSCREEN") && (line[10] == '\0' || line[10] == ' ')) {
       assert(vt);
       if(!screen)
-        screen = vterm_obtain_screen(vt);
-      vterm_screen_set_callbacks(screen, &screen_cbs, NULL);
-      vterm_screen_callbacks_has_pushline4(screen);
+        screen = fyvt_obtain_screen(vt);
+      fyvt_screen_set_callbacks(screen, &screen_cbs, NULL);
+      fyvt_screen_callbacks_has_pushline4(screen);
 
       int i = 10;
       int sense = 1;
@@ -856,7 +856,7 @@ int harness_command(const char *cmdline)
           sense = 0;
           break;
         case 'a':
-          vterm_screen_enable_altscreen(screen, 1);
+          fyvt_screen_enable_altscreen(screen, 1);
           break;
         case 'd':
           want_screen_damage = sense;
@@ -878,7 +878,7 @@ int harness_command(const char *cmdline)
           want_screen_scrollback = sense;
           break;
         case 'r':
-          vterm_screen_enable_reflow(screen, sense);
+          fyvt_screen_enable_reflow(screen, sense);
           break;
         default:
           fprintf(stderr, "Unrecognised WANTSCREEN flag '%c'\n", line[i]);
@@ -886,16 +886,16 @@ int harness_command(const char *cmdline)
     }
 
     else if(sscanf(line, "UTF8 %d", &flag)) {
-      vterm_set_utf8(vt, flag);
+      fyvt_set_utf8(vt, flag);
     }
 
     else if(streq(line, "RESET")) {
       if(state) {
-        vterm_state_reset(state, 1);
-        vterm_state_get_cursorpos(state, &state_pos);
+        fyvt_state_reset(state, 1);
+        fyvt_state_get_cursorpos(state, &state_pos);
       }
       if(screen) {
-        vterm_screen_reset(screen, 1);
+        fyvt_screen_reset(screen, 1);
       }
     }
 
@@ -905,7 +905,7 @@ int harness_command(const char *cmdline)
       while(linep[0] == ' ')
         linep++;
       sscanf(linep, "%d, %d", &rows, &cols);
-      vterm_set_size(vt, rows, cols);
+      fyvt_set_size(vt, rows, cols);
     }
 
     else if(strstartswith(line, "PUSH ")) {
@@ -913,7 +913,7 @@ int harness_command(const char *cmdline)
       size_t len = inplace_hex2bytes(bytes);
       assert(len);
 
-      size_t written = vterm_input_write(vt, bytes, len);
+      size_t written = fyvt_input_write(vt, bytes, len);
       if(written < len)
         fprintf(stderr, "! short write\n");
     }
@@ -922,7 +922,7 @@ int harness_command(const char *cmdline)
       /* This isn't really external API but it's hard to get this out any
        * other way
        */
-      encoding.enc = vterm_lookup_encoding(ENC_UTF8, 'u');
+      encoding.enc = fyvt_lookup_encoding(ENC_UTF8, 'u');
       if(encoding.enc->init)
         (*encoding.enc->init)(encoding.enc, encoding.data);
     }
@@ -953,30 +953,30 @@ int harness_command(const char *cmdline)
       unsigned int c = 0;
       while(linep[0] == ' ')
         linep++;
-      VTermModifier mod = strpe_modifiers(&linep);
+      enum fyvt_modifier mod = strpe_modifiers(&linep);
       sscanf(linep, " %x", &c);
 
-      vterm_keyboard_unichar(vt, c, mod);
+      fyvt_keyboard_unichar(vt, c, mod);
     }
 
     else if(strstartswith(line, "INKEY ")) {
       char *linep = line + 6;
       while(linep[0] == ' ')
         linep++;
-      VTermModifier mod = strpe_modifiers(&linep);
+      enum fyvt_modifier mod = strpe_modifiers(&linep);
       while(linep[0] == ' ')
         linep++;
-      VTermKey key = strp_key(linep);
+      enum fyvt_key key = strp_key(linep);
 
-      vterm_keyboard_key(vt, key, mod);
+      fyvt_keyboard_key(vt, key, mod);
     }
 
     else if(strstartswith(line, "PASTE ")) {
       char *linep = line + 6;
       if(streq(linep, "START"))
-        vterm_keyboard_start_paste(vt);
+        fyvt_keyboard_start_paste(vt);
       else if(streq(linep, "END"))
-        vterm_keyboard_end_paste(vt);
+        fyvt_keyboard_end_paste(vt);
       else
         goto abort_line;
     }
@@ -985,9 +985,9 @@ int harness_command(const char *cmdline)
       assert(state);
       char *linep = line + 6;
       if(streq(linep, "IN"))
-        vterm_state_focus_in(state);
+        fyvt_state_focus_in(state);
       else if(streq(linep, "OUT"))
-        vterm_state_focus_out(state);
+        fyvt_state_focus_out(state);
       else
         goto abort_line;
     }
@@ -1001,8 +1001,8 @@ int harness_command(const char *cmdline)
       linep += len;
       while(linep[0] == ' ')
         linep++;
-      VTermModifier mod = strpe_modifiers(&linep);
-      vterm_mouse_move(vt, row, col, mod);
+      enum fyvt_modifier mod = strpe_modifiers(&linep);
+      fyvt_mouse_move(vt, row, col, mod);
     }
 
     else if(strstartswith(line, "MOUSEBTN ")) {
@@ -1015,8 +1015,8 @@ int harness_command(const char *cmdline)
       linep += len;
       while(linep[0] == ' ')
         linep++;
-      VTermModifier mod = strpe_modifiers(&linep);
-      vterm_mouse_button(vt, button, (press == 'd' || press == 'D'), mod);
+      enum fyvt_modifier mod = strpe_modifiers(&linep);
+      fyvt_mouse_button(vt, button, (press == 'd' || press == 'D'), mod);
     }
 
     else if(strstartswith(line, "SELECTION ")) {
@@ -1024,7 +1024,7 @@ int harness_command(const char *cmdline)
       char *linep = line + 10;
       unsigned int mask;
       int len;
-      VTermStringFragment frag = { 0 };
+      struct fyvt_string_fragment frag = { 0 };
       sscanf(linep, "%x%n", &mask, &len);
       linep += len;
       while(linep[0] == ' ')
@@ -1045,7 +1045,7 @@ int harness_command(const char *cmdline)
       if(linep[0] == ']') {
         frag.final = true;
       }
-      vterm_state_send_selection(state, mask, frag);
+      fyvt_state_send_selection(state, mask, frag);
     }
 
     else if(strstartswith(line, "DAMAGEMERGE ")) {
@@ -1054,18 +1054,18 @@ int harness_command(const char *cmdline)
       while(linep[0] == ' ')
         linep++;
       if(streq(linep, "CELL"))
-        vterm_screen_set_damage_merge(screen, VTERM_DAMAGE_CELL);
+        fyvt_screen_set_damage_merge(screen, FYVT_DAMAGE_CELL);
       else if(streq(linep, "ROW"))
-        vterm_screen_set_damage_merge(screen, VTERM_DAMAGE_ROW);
+        fyvt_screen_set_damage_merge(screen, FYVT_DAMAGE_ROW);
       else if(streq(linep, "SCREEN"))
-        vterm_screen_set_damage_merge(screen, VTERM_DAMAGE_SCREEN);
+        fyvt_screen_set_damage_merge(screen, FYVT_DAMAGE_SCREEN);
       else if(streq(linep, "SCROLL"))
-        vterm_screen_set_damage_merge(screen, VTERM_DAMAGE_SCROLL);
+        fyvt_screen_set_damage_merge(screen, FYVT_DAMAGE_SCROLL);
     }
 
     else if(strstartswith(line, "DAMAGEFLUSH")) {
       assert(screen);
-      vterm_screen_flush_damage(screen);
+      fyvt_screen_flush_damage(screen);
     }
 
     else if(strstartswith(line, "SETDEFAULTCOL ")) {
@@ -1073,23 +1073,23 @@ int harness_command(const char *cmdline)
       char *linep = line + 14;
       while(linep[0] == ' ')
         linep++;
-      VTermColor fg = strpe_color(&linep);
+      union fyvt_color fg = strpe_color(&linep);
       if(linep[0]) {
         while(linep[0] == ' ')
           linep++;
-        VTermColor bg = strpe_color(&linep);
+        union fyvt_color bg = strpe_color(&linep);
 
-        vterm_screen_set_default_colors(screen, &fg, &bg);
+        fyvt_screen_set_default_colors(screen, &fg, &bg);
       }
       else
-        vterm_screen_set_default_colors(screen, &fg, NULL);
+        fyvt_screen_set_default_colors(screen, &fg, NULL);
     }
 
     else if(line[0] == '?') {
       if(streq(line, "?cursor")) {
         assert(state);
-        VTermPos pos;
-        vterm_state_get_cursorpos(state, &pos);
+        struct fyvt_pos pos;
+        fyvt_state_get_cursorpos(state, &pos);
         if(pos.row != state_pos.row)
           printf("! row mismatch: state=%d,%d event=%d,%d\n",
               pos.row, pos.col, state_pos.row, state_pos.col);
@@ -1105,11 +1105,11 @@ int harness_command(const char *cmdline)
         while(linep[0] == ' ')
           linep++;
 
-        VTermValue val;
+        union fyvt_value val;
 #define BOOLSTR(v) ((v) ? "on" : "off")
 
         if(streq(linep, "bold")) {
-          vterm_state_get_penattr(state, VTERM_ATTR_BOLD, &val);
+          fyvt_state_get_penattr(state, FYVT_ATTR_BOLD, &val);
           if(val.boolean != state_pen.bold)
             printf("! pen bold mismatch; state=%s, event=%s\n",
                 BOOLSTR(val.boolean), BOOLSTR(state_pen.bold));
@@ -1117,7 +1117,7 @@ int harness_command(const char *cmdline)
             printf("%s\n", BOOLSTR(state_pen.bold));
         }
         else if(streq(linep, "underline")) {
-          vterm_state_get_penattr(state, VTERM_ATTR_UNDERLINE, &val);
+          fyvt_state_get_penattr(state, FYVT_ATTR_UNDERLINE, &val);
           if(val.boolean != state_pen.underline)
             printf("! pen underline mismatch; state=%d, event=%d\n",
                 val.boolean, state_pen.underline);
@@ -1125,7 +1125,7 @@ int harness_command(const char *cmdline)
             printf("%d\n", state_pen.underline);
         }
         else if(streq(linep, "italic")) {
-          vterm_state_get_penattr(state, VTERM_ATTR_ITALIC, &val);
+          fyvt_state_get_penattr(state, FYVT_ATTR_ITALIC, &val);
           if(val.boolean != state_pen.italic)
             printf("! pen italic mismatch; state=%s, event=%s\n",
                 BOOLSTR(val.boolean), BOOLSTR(state_pen.italic));
@@ -1133,7 +1133,7 @@ int harness_command(const char *cmdline)
             printf("%s\n", BOOLSTR(state_pen.italic));
         }
         else if(streq(linep, "blink")) {
-          vterm_state_get_penattr(state, VTERM_ATTR_BLINK, &val);
+          fyvt_state_get_penattr(state, FYVT_ATTR_BLINK, &val);
           if(val.boolean != state_pen.blink)
             printf("! pen blink mismatch; state=%s, event=%s\n",
                 BOOLSTR(val.boolean), BOOLSTR(state_pen.blink));
@@ -1141,7 +1141,7 @@ int harness_command(const char *cmdline)
             printf("%s\n", BOOLSTR(state_pen.blink));
         }
         else if(streq(linep, "reverse")) {
-          vterm_state_get_penattr(state, VTERM_ATTR_REVERSE, &val);
+          fyvt_state_get_penattr(state, FYVT_ATTR_REVERSE, &val);
           if(val.boolean != state_pen.reverse)
             printf("! pen reverse mismatch; state=%s, event=%s\n",
                 BOOLSTR(val.boolean), BOOLSTR(state_pen.reverse));
@@ -1149,7 +1149,7 @@ int harness_command(const char *cmdline)
             printf("%s\n", BOOLSTR(state_pen.reverse));
         }
         else if(streq(linep, "font")) {
-          vterm_state_get_penattr(state, VTERM_ATTR_FONT, &val);
+          fyvt_state_get_penattr(state, FYVT_ATTR_FONT, &val);
           if(val.boolean != state_pen.font)
             printf("! pen font mismatch; state=%d, event=%d\n",
                 val.boolean, state_pen.font);
@@ -1157,7 +1157,7 @@ int harness_command(const char *cmdline)
             printf("%d\n", state_pen.font);
         }
         else if(streq(linep, "small")) {
-          vterm_state_get_penattr(state, VTERM_ATTR_SMALL, &val);
+          fyvt_state_get_penattr(state, FYVT_ATTR_SMALL, &val);
           if(val.boolean != state_pen.small)
             printf("! pen small mismatch; state=%s, event=%s\n",
                 BOOLSTR(val.boolean), BOOLSTR(state_pen.small));
@@ -1165,17 +1165,17 @@ int harness_command(const char *cmdline)
             printf("%s\n", BOOLSTR(state_pen.small));
         }
         else if(streq(linep, "baseline")) {
-          vterm_state_get_penattr(state, VTERM_ATTR_BASELINE, &val);
+          fyvt_state_get_penattr(state, FYVT_ATTR_BASELINE, &val);
           if(val.number != state_pen.baseline)
             printf("! pen baseline mismatch: state=%d, event=%d\n",
                 val.number, state_pen.baseline);
           else
-            printf("%s\n", state_pen.baseline == VTERM_BASELINE_RAISE ? "raise"
-                         : state_pen.baseline == VTERM_BASELINE_LOWER ? "lower"
+            printf("%s\n", state_pen.baseline == FYVT_BASELINE_RAISE ? "raise"
+                         : state_pen.baseline == FYVT_BASELINE_LOWER ? "lower"
                          : "normal");
         }
         else if(streq(linep, "dim")) {
-          vterm_state_get_penattr(state, VTERM_ATTR_DIM, &val);
+          fyvt_state_get_penattr(state, FYVT_ATTR_DIM, &val);
           if(val.boolean != state_pen.dim)
             printf("! pen dim mismatch; state=%s, event=%s\n",
                 BOOLSTR(val.boolean), BOOLSTR(state_pen.dim));
@@ -1183,7 +1183,7 @@ int harness_command(const char *cmdline)
             printf("%s\n", BOOLSTR(state_pen.dim));
         }
         else if(streq(linep, "overline")) {
-          vterm_state_get_penattr(state, VTERM_ATTR_OVERLINE, &val);
+          fyvt_state_get_penattr(state, FYVT_ATTR_OVERLINE, &val);
           if(val.boolean != state_pen.overline)
             printf("! pen overline mismatch; state=%s, event=%s\n",
                 BOOLSTR(val.boolean), BOOLSTR(state_pen.overline));
@@ -1205,14 +1205,14 @@ int harness_command(const char *cmdline)
         assert(state);
         char *linep = line + 10;
         int row;
-        const VTermLineInfo *info;
+        const struct fyvt_line_info *info;
         while(linep[0] == ' ')
           linep++;
         if(sscanf(linep, "%d", &row) < 1) {
           printf("! lineinfo unrecognised input\n");
           goto abort_line;
         }
-        info = vterm_state_get_lineinfo(state, row);
+        info = fyvt_state_get_lineinfo(state, row);
         if(info->doublewidth)
           printf("dwl ");
         if(info->doubleheight)
@@ -1224,7 +1224,7 @@ int harness_command(const char *cmdline)
       else if(strstartswith(line, "?screen_chars ")) {
         assert(screen);
         char *linep = line + 13;
-        VTermRect rect;
+        struct fyvt_rect rect;
         size_t len;
         while(linep[0] == ' ')
           linep++;
@@ -1233,20 +1233,20 @@ int harness_command(const char *cmdline)
         else if(sscanf(linep, "%d", &rect.start_row) == 1) {
           rect.end_row = rect.start_row + 1;
           rect.start_col = 0;
-          vterm_get_size(vt, NULL, &rect.end_col);
+          fyvt_get_size(vt, NULL, &rect.end_col);
         }
         else {
           printf("! screen_chars unrecognised input\n");
           goto abort_line;
         }
-        len = vterm_screen_get_chars(screen, NULL, 0, rect);
+        len = fyvt_screen_get_chars(screen, NULL, 0, rect);
         if(len == (size_t)-1)
           printf("! screen_chars error\n");
         else if(len == 0)
           printf("\n");
         else {
           uint32_t *chars = malloc(sizeof(uint32_t) * len);
-          vterm_screen_get_chars(screen, chars, len, rect);
+          fyvt_screen_get_chars(screen, chars, len, rect);
           for(size_t i = 0; i < len; i++) {
             printf("0x%02x%s", chars[i], i < len-1 ? "," : "\n");
           }
@@ -1256,7 +1256,7 @@ int harness_command(const char *cmdline)
       else if(strstartswith(line, "?screen_text ")) {
         assert(screen);
         char *linep = line + 12;
-        VTermRect rect;
+        struct fyvt_rect rect;
         size_t len;
         while(linep[0] == ' ')
           linep++;
@@ -1264,7 +1264,7 @@ int harness_command(const char *cmdline)
           printf("! screen_text unrecognised input\n");
           goto abort_line;
         }
-        len = vterm_screen_get_text(screen, NULL, 0, rect);
+        len = fyvt_screen_get_text(screen, NULL, 0, rect);
         if(len == (size_t)-1)
           printf("! screen_text error\n");
         else if(len == 0)
@@ -1276,7 +1276,7 @@ int harness_command(const char *cmdline)
           text[-2] = 0x55; text[-1] = 0xAA;
           text[len] = 0x55; text[len+1] = 0xAA;
 
-          vterm_screen_get_text(screen, (char *)text, len, rect);
+          fyvt_screen_get_text(screen, (char *)text, len, rect);
 
           if(text[-2] != 0x55 || text[-1] != 0xAA)
             printf("! screen_get_text buffer overrun left [%02x,%02x]\n", text[-2], text[-1]);
@@ -1293,18 +1293,18 @@ int harness_command(const char *cmdline)
       else if(strstartswith(line, "?screen_cell ")) {
         assert(screen);
         char *linep = line + 12;
-        VTermPos pos;
+        struct fyvt_pos pos;
         while(linep[0] == ' ')
           linep++;
         if(sscanf(linep, "%d,%d\n", &pos.row, &pos.col) < 2) {
           printf("! screen_cell unrecognised input\n");
           goto abort_line;
         }
-        VTermScreenCell cell;
-        if(!vterm_screen_get_cell(screen, pos, &cell))
+        struct fyvt_screen_cell cell;
+        if(!fyvt_screen_get_cell(screen, pos, &cell))
           goto abort_line;
         printf("{");
-        for(int i = 0; i < VTERM_MAX_CHARS_PER_CELL && cell.chars[i]; i++) {
+        for(int i = 0; i < FYVT_MAX_CHARS_PER_CELL && cell.chars[i]; i++) {
           printf("%s0x%x", i ? "," : "", cell.chars[i]);
         }
         printf("} width=%d attrs={", cell.width);
@@ -1316,16 +1316,16 @@ int harness_command(const char *cmdline)
         if(cell.attrs.font)      printf("F%d", cell.attrs.font);
         if(cell.attrs.small)     printf("S");
         if(cell.attrs.baseline)  printf(
-            cell.attrs.baseline == VTERM_BASELINE_RAISE ? "^" :
+            cell.attrs.baseline == FYVT_BASELINE_RAISE ? "^" :
                                                           "_");
         printf("} ");
         if(cell.attrs.dwl)       printf("dwl ");
         if(cell.attrs.dhl)       printf("dhl-%s ", cell.attrs.dhl == 2 ? "bottom" : "top");
         printf("fg=");
-        vterm_screen_convert_color_to_rgb(screen, &cell.fg);
+        fyvt_screen_convert_color_to_rgb(screen, &cell.fg);
         print_color(&cell.fg);
         printf(" bg=");
-        vterm_screen_convert_color_to_rgb(screen, &cell.bg);
+        fyvt_screen_convert_color_to_rgb(screen, &cell.bg);
         print_color(&cell.bg);
         printf("\n");
       }
@@ -1334,28 +1334,28 @@ int harness_command(const char *cmdline)
         char *linep = line + 12;
         while(linep[0] == ' ')
           linep++;
-        VTermPos pos;
+        struct fyvt_pos pos;
         if(sscanf(linep, "%d,%d\n", &pos.row, &pos.col) < 2) {
           printf("! screen_eol unrecognised input\n");
           goto abort_line;
         }
-        printf("%d\n", vterm_screen_is_eol(screen, pos));
+        printf("%d\n", fyvt_screen_is_eol(screen, pos));
       }
       else if(strstartswith(line, "?screen_attrs_extent ")) {
         assert(screen);
         char *linep = line + 21;
         while(linep[0] == ' ')
           linep++;
-        VTermPos pos;
+        struct fyvt_pos pos;
         if(sscanf(linep, "%d,%d\n", &pos.row, &pos.col) < 2) {
           printf("! screen_attrs_extent unrecognised input\n");
           goto abort_line;
         }
-        VTermRect rect = {
+        struct fyvt_rect rect = {
           .start_col = 0,
           .end_col   = -1,
         };
-        if(!vterm_screen_get_attrs_extent(screen, &rect, pos, ~0)) {
+        if(!fyvt_screen_get_attrs_extent(screen, &rect, pos, ~0)) {
           printf("! screen_attrs_extent failed\n");
           goto abort_line;
         }
@@ -1370,10 +1370,10 @@ int harness_command(const char *cmdline)
     else
       abort_line: err = 1;
 
-    size_t outlen = vt ? vterm_output_get_buffer_current(vt) : 0;
+    size_t outlen = vt ? fyvt_output_get_buffer_current(vt) : 0;
     if(outlen > 0) {
       char outbuff[outlen];
-      vterm_output_read(vt, outbuff, outlen);
+      fyvt_output_read(vt, outbuff, outlen);
 
       term_output(outbuff, outlen, NULL);
     }
@@ -1385,7 +1385,7 @@ int harness_command(const char *cmdline)
 void harness_cleanup(void)
 {
   if(vt) {
-    vterm_free(vt);
+    fyvt_free(vt);
     vt = NULL;
     state = NULL;
     screen = NULL;

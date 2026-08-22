@@ -11,7 +11,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "vterm.h"
+#include <libfyvterm.h>
 
 static const char *special_begin = "{";
 static const char *special_end   = "}";
@@ -160,7 +160,7 @@ static int parser_csi(const char *leader, const long args[], int argcount, const
   return 1;
 }
 
-static int parser_osc(int command, VTermStringFragment frag, void *user)
+static int parser_osc(int command, struct fyvt_string_fragment frag, void *user)
 {
   (void)user;
   if(frag.initial) {
@@ -178,7 +178,7 @@ static int parser_osc(int command, VTermStringFragment frag, void *user)
   return 1;
 }
 
-static int parser_dcs(const char *command, size_t commandlen, VTermStringFragment frag, void *user)
+static int parser_dcs(const char *command, size_t commandlen, struct fyvt_string_fragment frag, void *user)
 {
   (void)user;
   if(frag.initial)
@@ -192,7 +192,7 @@ static int parser_dcs(const char *command, size_t commandlen, VTermStringFragmen
   return 1;
 }
 
-static VTermParserCallbacks parser_cbs = {
+static struct fyvt_parser_callbacks parser_cbs = {
   .text    = &parser_text,
   .control = &parser_control,
   .escape  = &parser_escape,
@@ -231,21 +231,21 @@ int main(int argc, char *argv[])
   }
 
   /* Size matters not for the parser */
-  VTerm *vt = vterm_new(25, 80);
-  vterm_set_utf8(vt, 1);
-  vterm_parser_set_callbacks(vt, &parser_cbs, NULL);
-  vterm_parser_set_emit_nul(vt, true);
+  struct fyvt *vt = fyvt_new(25, 80);
+  fyvt_set_utf8(vt, 1);
+  fyvt_parser_set_callbacks(vt, &parser_cbs, NULL);
+  fyvt_parser_set_emit_nul(vt, true);
 
   int len;
   char buffer[1024];
   while((len = read(fd, buffer, sizeof(buffer))) > 0) {
-    vterm_input_write(vt, buffer, len);
+    fyvt_input_write(vt, buffer, len);
   }
 
   printf("\n");
 
   close(fd);
-  vterm_free(vt);
+  fyvt_free(vt);
 
   return 0;
 }

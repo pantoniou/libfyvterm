@@ -1,4 +1,4 @@
-#include "vterm_internal.h"
+#include "fyvt_internal.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -12,9 +12,9 @@
 
 /* Some convenient wrappers to make callback functions easier */
 
-static void putglyph(VTermState *state, const uint32_t chars[], int width, VTermPos pos)
+static void putglyph(struct fyvt_state *state, const uint32_t chars[], int width, struct fyvt_pos pos)
 {
-  VTermGlyphInfo info = {
+  struct fyvt_glyph_info info = {
     .chars = chars,
     .width = width,
     .protected_cell = state->protected_cell,
@@ -29,7 +29,7 @@ static void putglyph(VTermState *state, const uint32_t chars[], int width, VTerm
   DEBUG_LOG("libvterm: Unhandled putglyph U+%04x at (%d,%d)\n", chars[0], pos.col, pos.row);
 }
 
-static void updatecursor(VTermState *state, VTermPos *oldpos, int cancel_phantom)
+static void updatecursor(struct fyvt_state *state, struct fyvt_pos *oldpos, int cancel_phantom)
 {
   if(state->pos.col == oldpos->col && state->pos.row == oldpos->row)
     return;
@@ -42,7 +42,7 @@ static void updatecursor(VTermState *state, VTermPos *oldpos, int cancel_phantom
       return;
 }
 
-static void erase(VTermState *state, VTermRect rect, int selective)
+static void erase(struct fyvt_state *state, struct fyvt_rect rect, int selective)
 {
   if(rect.end_col == state->cols) {
     /* If we're erasing the final cells of any lines, cancel the continuation
@@ -57,9 +57,9 @@ static void erase(VTermState *state, VTermRect rect, int selective)
       return;
 }
 
-static VTermState *vterm_state_new(VTerm *vt)
+static struct fyvt_state *fyvt_state_new(struct fyvt *vt)
 {
-  VTermState *state = vterm_allocator_malloc(vt, sizeof(VTermState));
+  struct fyvt_state *state = fyvt_allocator_malloc(vt, sizeof(struct fyvt_state));
 
   state->vt = vt;
 
@@ -80,26 +80,26 @@ static VTermState *vterm_state_new(VTerm *vt)
   state->selection.user      = NULL;
   state->selection.buffer    = NULL;
 
-  vterm_state_newpen(state);
+  fyvt_state_newpen(state);
 
   state->bold_is_highbright = 0;
 
   state->combine_chars_size = 16;
-  state->combine_chars = vterm_allocator_malloc(state->vt, state->combine_chars_size * sizeof(state->combine_chars[0]));
+  state->combine_chars = fyvt_allocator_malloc(state->vt, state->combine_chars_size * sizeof(state->combine_chars[0]));
 
-  state->tabstops = vterm_allocator_malloc(state->vt, (state->cols + 7) / 8);
+  state->tabstops = fyvt_allocator_malloc(state->vt, (state->cols + 7) / 8);
 
-  state->lineinfos[BUFIDX_PRIMARY]   = vterm_allocator_malloc(state->vt, state->rows * sizeof(VTermLineInfo));
+  state->lineinfos[BUFIDX_PRIMARY]   = fyvt_allocator_malloc(state->vt, state->rows * sizeof(struct fyvt_line_info));
   /* TODO: Make an 'enable' function */
-  state->lineinfos[BUFIDX_ALTSCREEN] = vterm_allocator_malloc(state->vt, state->rows * sizeof(VTermLineInfo));
+  state->lineinfos[BUFIDX_ALTSCREEN] = fyvt_allocator_malloc(state->vt, state->rows * sizeof(struct fyvt_line_info));
   state->lineinfo = state->lineinfos[BUFIDX_PRIMARY];
 
-  state->encoding_utf8.enc = vterm_lookup_encoding(ENC_UTF8, 'u');
+  state->encoding_utf8.enc = fyvt_lookup_encoding(ENC_UTF8, 'u');
   if(*state->encoding_utf8.enc->init)
     (*state->encoding_utf8.enc->init)(state->encoding_utf8.enc, state->encoding_utf8.data);
 
   /* Kitty keyboard protocol: each screen starts with one all-zero flags
-   * entry on its stack (see vterm_state_get_key_encoding_flags()). The
+   * entry on its stack (see fyvt_state_get_key_encoding_flags()). The
    * allocator zeroes new memory, so only .size needs setting. */
   for(size_t i = 0; i < sizeof(state->key_encoding_stacks)/sizeof(state->key_encoding_stacks[0]); i++)
     state->key_encoding_stacks[i].size = 1;
@@ -107,19 +107,19 @@ static VTermState *vterm_state_new(VTerm *vt)
   return state;
 }
 
-INTERNAL void vterm_state_free(VTermState *state)
+INTERNAL void fyvt_state_free(struct fyvt_state *state)
 {
   if(state->selection.buffer_owned)
-    vterm_allocator_free(state->vt, state->selection.buffer);
-  vterm_allocator_free(state->vt, state->tabstops);
-  vterm_allocator_free(state->vt, state->lineinfos[BUFIDX_PRIMARY]);
+    fyvt_allocator_free(state->vt, state->selection.buffer);
+  fyvt_allocator_free(state->vt, state->tabstops);
+  fyvt_allocator_free(state->vt, state->lineinfos[BUFIDX_PRIMARY]);
   if(state->lineinfos[BUFIDX_ALTSCREEN])
-    vterm_allocator_free(state->vt, state->lineinfos[BUFIDX_ALTSCREEN]);
-  vterm_allocator_free(state->vt, state->combine_chars);
-  vterm_allocator_free(state->vt, state);
+    fyvt_allocator_free(state->vt, state->lineinfos[BUFIDX_ALTSCREEN]);
+  fyvt_allocator_free(state->vt, state->combine_chars);
+  fyvt_allocator_free(state->vt, state);
 }
 
-static void scroll(VTermState *state, VTermRect rect, int downward, int rightward)
+static void scroll(struct fyvt_state *state, struct fyvt_rect rect, int downward, int rightward)
 {
   if(!downward && !rightward)
     return;
@@ -142,23 +142,23 @@ static void scroll(VTermState *state, VTermRect rect, int downward, int rightwar
     /* Work out what subsection of the destination area is about to be destroyed */
     if(downward > 0)
       /* about to destroy the top */
-      (*state->callbacks->premove)((VTermRect){
+      (*state->callbacks->premove)((struct fyvt_rect){
           .start_row = rect.start_row, .end_row = rect.start_row + downward,
           .start_col = rect.start_col, .end_col = rect.end_col}, state->cbdata);
     else if(downward < 0)
       /* about to destroy the bottom */
-      (*state->callbacks->premove)((VTermRect){
+      (*state->callbacks->premove)((struct fyvt_rect){
           .start_row = rect.end_row + downward, .end_row = rect.end_row,
           .start_col = rect.start_col,          .end_col = rect.end_col}, state->cbdata);
 
     if(rightward > 0)
       /* about to destroy the left */
-      (*state->callbacks->premove)((VTermRect){
+      (*state->callbacks->premove)((struct fyvt_rect){
           .start_row = rect.start_row, .end_row = rect.end_row,
           .start_col = rect.start_col, .end_col = rect.start_col + rightward}, state->cbdata);
     else if(rightward < 0)
       /* about to destroy the right */
-      (*state->callbacks->premove)((VTermRect){
+      (*state->callbacks->premove)((struct fyvt_rect){
           .start_row = rect.start_row,           .end_row = rect.end_row,
           .start_col = rect.end_col + rightward, .end_col = rect.end_col}, state->cbdata);
   }
@@ -172,14 +172,14 @@ static void scroll(VTermState *state, VTermRect rect, int downward, int rightwar
               state->lineinfo + rect.start_row + downward,
               height * sizeof(state->lineinfo[0]));
       for(int row = rect.end_row - downward; row < rect.end_row; row++)
-        state->lineinfo[row] = (VTermLineInfo){ 0 };
+        state->lineinfo[row] = (struct fyvt_line_info){ 0 };
     }
     else {
       memmove(state->lineinfo + rect.start_row - downward,
               state->lineinfo + rect.start_row,
               height * sizeof(state->lineinfo[0]));
       for(int row = rect.start_row; row < rect.start_row - downward; row++)
-        state->lineinfo[row] = (VTermLineInfo){ 0 };
+        state->lineinfo[row] = (struct fyvt_line_info){ 0 };
     }
   }
 
@@ -188,14 +188,14 @@ static void scroll(VTermState *state, VTermRect rect, int downward, int rightwar
       return;
 
   if(state->callbacks)
-    vterm_scroll_rect(rect, downward, rightward,
+    fyvt_scroll_rect(rect, downward, rightward,
         state->callbacks->moverect, state->callbacks->erase, state->cbdata);
 }
 
-static void linefeed(VTermState *state)
+static void linefeed(struct fyvt_state *state)
 {
   if(state->pos.row == SCROLLREGION_BOTTOM(state) - 1) {
-    VTermRect rect = {
+    struct fyvt_rect rect = {
       .start_row = state->scrollregion_top,
       .end_row   = SCROLLREGION_BOTTOM(state),
       .start_col = SCROLLREGION_LEFT(state),
@@ -208,38 +208,38 @@ static void linefeed(VTermState *state)
     state->pos.row++;
 }
 
-static void grow_combine_buffer(VTermState *state)
+static void grow_combine_buffer(struct fyvt_state *state)
 {
   size_t    new_size = state->combine_chars_size * 2;
-  uint32_t *new_chars = vterm_allocator_malloc(state->vt, new_size * sizeof(new_chars[0]));
+  uint32_t *new_chars = fyvt_allocator_malloc(state->vt, new_size * sizeof(new_chars[0]));
 
   memcpy(new_chars, state->combine_chars, state->combine_chars_size * sizeof(new_chars[0]));
 
-  vterm_allocator_free(state->vt, state->combine_chars);
+  fyvt_allocator_free(state->vt, state->combine_chars);
 
   state->combine_chars = new_chars;
   state->combine_chars_size = new_size;
 }
 
-static void set_col_tabstop(VTermState *state, int col)
+static void set_col_tabstop(struct fyvt_state *state, int col)
 {
   unsigned char mask = 1 << (col & 7);
   state->tabstops[col >> 3] |= mask;
 }
 
-static void clear_col_tabstop(VTermState *state, int col)
+static void clear_col_tabstop(struct fyvt_state *state, int col)
 {
   unsigned char mask = 1 << (col & 7);
   state->tabstops[col >> 3] &= ~mask;
 }
 
-static int is_col_tabstop(VTermState *state, int col)
+static int is_col_tabstop(struct fyvt_state *state, int col)
 {
   unsigned char mask = 1 << (col & 7);
   return state->tabstops[col >> 3] & mask;
 }
 
-static int is_cursor_in_scrollregion(const VTermState *state)
+static int is_cursor_in_scrollregion(const struct fyvt_state *state)
 {
   if(state->pos.row < state->scrollregion_top ||
      state->pos.row >= SCROLLREGION_BOTTOM(state))
@@ -251,7 +251,7 @@ static int is_cursor_in_scrollregion(const VTermState *state)
   return 1;
 }
 
-static void tab(VTermState *state, int count, int direction)
+static void tab(struct fyvt_state *state, int count, int direction)
 {
   while(count > 0) {
     if(direction > 0) {
@@ -282,9 +282,9 @@ static void tab(VTermState *state, int count, int direction)
 #define DHL_TOP    1
 #define DHL_BOTTOM 2
 
-static void set_lineinfo(VTermState *state, int row, int force, int dwl, int dhl)
+static void set_lineinfo(struct fyvt_state *state, int row, int force, int dwl, int dhl)
 {
-  VTermLineInfo info = state->lineinfo[row];
+  struct fyvt_line_info info = state->lineinfo[row];
 
   if(dwl == DWL_OFF)
     info.doublewidth = DWL_OFF;
@@ -308,9 +308,9 @@ static void set_lineinfo(VTermState *state, int row, int force, int dwl, int dhl
 
 static int on_text(const char bytes[], size_t len, void *user)
 {
-  VTermState *state = user;
+  struct fyvt_state *state = user;
 
-  VTermPos oldpos = state->pos;
+  struct fyvt_pos oldpos = state->pos;
 
   uint32_t *codepoints = (uint32_t *)(state->vt->tmpbuffer);
   size_t maxpoints = (state->vt->tmpbuffer_len) / sizeof(uint32_t);
@@ -318,7 +318,7 @@ static int on_text(const char bytes[], size_t len, void *user)
   int npoints = 0;
   size_t eaten = 0;
 
-  VTermEncodingInstance *encoding =
+  struct fyvt_encoding_instance *encoding =
     state->gsingle_set     ? &state->encoding[state->gsingle_set] :
     !(bytes[eaten] & 0x80) ? &state->encoding[state->gl_set] :
     state->vt->mode.utf8   ? &state->encoding_utf8 :
@@ -349,7 +349,7 @@ static int on_text(const char bytes[], size_t len, void *user)
 
   /* This is a combining char. that needs to be merged with the previous
    * glyph output */
-  if(vterm_unicode_is_combining(codepoints[i])) {
+  if(fyvt_unicode_is_combining(codepoints[i])) {
     /* See if the cursor has moved since.
      *
      * Neovim carries a fix here (upstream commit 814f2629cb, "fix
@@ -377,7 +377,7 @@ static int on_text(const char bytes[], size_t len, void *user)
         saved_i++;
 
       /* Add extra ones */
-      while(i < npoints && vterm_unicode_is_combining(codepoints[i])) {
+      while(i < npoints && fyvt_unicode_is_combining(codepoints[i])) {
         if(saved_i >= state->combine_chars_size)
           grow_combine_buffer(state);
         state->combine_chars[saved_i++] = codepoints[i++];
@@ -405,18 +405,18 @@ static int on_text(const char bytes[], size_t len, void *user)
     int glyph_starts = i;
     int glyph_ends;
     for(glyph_ends = i + 1;
-        (glyph_ends < npoints) && (glyph_ends < glyph_starts + VTERM_MAX_CHARS_PER_CELL);
+        (glyph_ends < npoints) && (glyph_ends < glyph_starts + FYVT_MAX_CHARS_PER_CELL);
         glyph_ends++)
-      if(!vterm_unicode_is_combining(codepoints[glyph_ends]))
+      if(!fyvt_unicode_is_combining(codepoints[glyph_ends]))
         break;
 
     int width = 0;
 
-    uint32_t chars[VTERM_MAX_CHARS_PER_CELL + 1];
+    uint32_t chars[FYVT_MAX_CHARS_PER_CELL + 1];
 
     for( ; i < glyph_ends; i++) {
       chars[i - glyph_starts] = codepoints[i];
-      int this_width = vterm_unicode_width(codepoints[i]);
+      int this_width = fyvt_unicode_width(codepoints[i]);
 #ifdef DEBUG
       if(this_width < 0) {
         fprintf(stderr, "Text with negative-width codepoint U+%04x\n", codepoints[i]);
@@ -426,7 +426,7 @@ static int on_text(const char bytes[], size_t len, void *user)
       width += this_width;
     }
 
-    while(i < npoints && vterm_unicode_is_combining(codepoints[i]))
+    while(i < npoints && fyvt_unicode_is_combining(codepoints[i]))
       i++;
 
     chars[glyph_ends - glyph_starts] = 0;
@@ -452,7 +452,7 @@ static int on_text(const char bytes[], size_t len, void *user)
        * it'll have to 'ICH' effectively before every glyph. We should scan
        * ahead and ICH as many times as required
        */
-      VTermRect rect = {
+      struct fyvt_rect rect = {
         .start_row = state->pos.row,
         .end_row   = state->pos.row + 1,
         .start_col = state->pos.col,
@@ -504,9 +504,9 @@ static int on_text(const char bytes[], size_t len, void *user)
 
 static int on_control(unsigned char control, void *user)
 {
-  VTermState *state = user;
+  struct fyvt_state *state = user;
 
-  VTermPos oldpos = state->pos;
+  struct fyvt_pos oldpos = state->pos;
 
   switch(control) {
   case 0x07: // BEL - ECMA-48 8.3.3
@@ -558,7 +558,7 @@ static int on_control(unsigned char control, void *user)
 
   case 0x8d: // RI - ECMA-48 8.3.104
     if(state->pos.row == state->scrollregion_top) {
-      VTermRect rect = {
+      struct fyvt_rect rect = {
         .start_row = state->scrollregion_top,
         .end_row   = SCROLLREGION_BOTTOM(state),
         .start_col = SCROLLREGION_LEFT(state),
@@ -601,25 +601,25 @@ static int on_control(unsigned char control, void *user)
   return 1;
 }
 
-static int settermprop_bool(VTermState *state, VTermProp prop, int v)
+static int settermprop_bool(struct fyvt_state *state, enum fyvt_prop prop, int v)
 {
-  VTermValue val = { .boolean = v };
-  return vterm_state_set_termprop(state, prop, &val);
+  union fyvt_value val = { .boolean = v };
+  return fyvt_state_set_termprop(state, prop, &val);
 }
 
-static int settermprop_int(VTermState *state, VTermProp prop, int v)
+static int settermprop_int(struct fyvt_state *state, enum fyvt_prop prop, int v)
 {
-  VTermValue val = { .number = v };
-  return vterm_state_set_termprop(state, prop, &val);
+  union fyvt_value val = { .number = v };
+  return fyvt_state_set_termprop(state, prop, &val);
 }
 
-static int settermprop_string(VTermState *state, VTermProp prop, VTermStringFragment frag)
+static int settermprop_string(struct fyvt_state *state, enum fyvt_prop prop, struct fyvt_string_fragment frag)
 {
-  VTermValue val = { .string = frag };
-  return vterm_state_set_termprop(state, prop, &val);
+  union fyvt_value val = { .string = frag };
+  return fyvt_state_set_termprop(state, prop, &val);
 }
 
-static void savecursor(VTermState *state, int save)
+static void savecursor(struct fyvt_state *state, int save)
 {
   if(save) {
     state->saved.pos = state->pos;
@@ -627,18 +627,18 @@ static void savecursor(VTermState *state, int save)
     state->saved.mode.cursor_blink   = state->mode.cursor_blink;
     state->saved.mode.cursor_shape   = state->mode.cursor_shape;
 
-    vterm_state_savepen(state, 1);
+    fyvt_state_savepen(state, 1);
   }
   else {
-    VTermPos oldpos = state->pos;
+    struct fyvt_pos oldpos = state->pos;
 
     state->pos = state->saved.pos;
 
-    settermprop_bool(state, VTERM_PROP_CURSORVISIBLE, state->saved.mode.cursor_visible);
-    settermprop_bool(state, VTERM_PROP_CURSORBLINK,   state->saved.mode.cursor_blink);
-    settermprop_int (state, VTERM_PROP_CURSORSHAPE,   state->saved.mode.cursor_shape);
+    settermprop_bool(state, FYVT_PROP_CURSORVISIBLE, state->saved.mode.cursor_visible);
+    settermprop_bool(state, FYVT_PROP_CURSORBLINK,   state->saved.mode.cursor_blink);
+    settermprop_int (state, FYVT_PROP_CURSORSHAPE,   state->saved.mode.cursor_shape);
 
-    vterm_state_savepen(state, 0);
+    fyvt_state_savepen(state, 0);
 
     updatecursor(state, &oldpos, 1);
   }
@@ -646,7 +646,7 @@ static void savecursor(VTermState *state, int save)
 
 static int on_escape(const char *bytes, size_t len, void *user)
 {
-  VTermState *state = user;
+  struct fyvt_state *state = user;
 
   /* Easier to decode this from the first byte, even though the final
    * byte terminates it
@@ -701,7 +701,7 @@ static int on_escape(const char *bytes, size_t len, void *user)
 
       case '8': // DECALN
       {
-        VTermPos pos;
+        struct fyvt_pos pos;
         uint32_t E[] = { 'E', 0 };
         for(pos.row = 0; pos.row < state->rows; pos.row++)
           for(pos.col = 0; pos.col < ROWWIDTH(state, pos.row); pos.col++)
@@ -720,7 +720,7 @@ static int on_escape(const char *bytes, size_t len, void *user)
 
     {
       int setnum = bytes[0] - 0x28;
-      VTermEncoding *newenc = vterm_lookup_encoding(ENC_SINGLE_94, bytes[1]);
+      struct fyvt_encoding *newenc = fyvt_lookup_encoding(ENC_SINGLE_94, bytes[1]);
 
       if(newenc) {
         state->encoding[setnum].enc = newenc;
@@ -753,8 +753,8 @@ static int on_escape(const char *bytes, size_t len, void *user)
 
   case 'c': // RIS - ECMA-48 8.3.105
   {
-    VTermPos oldpos = state->pos;
-    vterm_state_reset(state, 1);
+    struct fyvt_pos oldpos = state->pos;
+    fyvt_state_reset(state, 1);
     if(state->callbacks && state->callbacks->movecursor)
       (*state->callbacks->movecursor)(state->pos, oldpos, state->mode.cursor_visible, state->cbdata);
     return 1;
@@ -785,7 +785,7 @@ static int on_escape(const char *bytes, size_t len, void *user)
   }
 }
 
-static void set_mode(VTermState *state, int num, int val)
+static void set_mode(struct fyvt_state *state, int num, int val)
 {
   switch(num) {
   case 4: // IRM - ECMA-48 7.2.10
@@ -802,7 +802,7 @@ static void set_mode(VTermState *state, int num, int val)
   }
 }
 
-static void set_dec_mode(VTermState *state, int num, int val)
+static void set_dec_mode(struct fyvt_state *state, int num, int val)
 {
   switch(num) {
   case 1:
@@ -810,12 +810,12 @@ static void set_dec_mode(VTermState *state, int num, int val)
     break;
 
   case 5: // DECSCNM - screen mode
-    settermprop_bool(state, VTERM_PROP_REVERSE, val);
+    settermprop_bool(state, FYVT_PROP_REVERSE, val);
     break;
 
   case 6: // DECOM - origin mode
     {
-      VTermPos oldpos = state->pos;
+      struct fyvt_pos oldpos = state->pos;
       state->mode.origin = val;
       state->pos.row = state->mode.origin ? state->scrollregion_top : 0;
       state->pos.col = state->mode.origin ? SCROLLREGION_LEFT(state) : 0;
@@ -828,11 +828,11 @@ static void set_dec_mode(VTermState *state, int num, int val)
     break;
 
   case 12:
-    settermprop_bool(state, VTERM_PROP_CURSORBLINK, val);
+    settermprop_bool(state, FYVT_PROP_CURSORBLINK, val);
     break;
 
   case 25:
-    settermprop_bool(state, VTERM_PROP_CURSORVISIBLE, val);
+    settermprop_bool(state, FYVT_PROP_CURSORVISIBLE, val);
     break;
 
   case 69: // DECVSSM - vertical split screen mode
@@ -849,15 +849,15 @@ static void set_dec_mode(VTermState *state, int num, int val)
   case 1000:
   case 1002:
   case 1003:
-    settermprop_int(state, VTERM_PROP_MOUSE,
-        !val          ? VTERM_PROP_MOUSE_NONE  :
-        (num == 1000) ? VTERM_PROP_MOUSE_CLICK :
-        (num == 1002) ? VTERM_PROP_MOUSE_DRAG  :
-                        VTERM_PROP_MOUSE_MOVE);
+    settermprop_int(state, FYVT_PROP_MOUSE,
+        !val          ? FYVT_PROP_MOUSE_NONE  :
+        (num == 1000) ? FYVT_PROP_MOUSE_CLICK :
+        (num == 1002) ? FYVT_PROP_MOUSE_DRAG  :
+                        FYVT_PROP_MOUSE_MOVE);
     break;
 
   case 1004:
-    settermprop_bool(state, VTERM_PROP_FOCUSREPORT, val);
+    settermprop_bool(state, FYVT_PROP_FOCUSREPORT, val);
     state->mode.report_focus = val;
     break;
 
@@ -874,7 +874,7 @@ static void set_dec_mode(VTermState *state, int num, int val)
     break;
 
   case 1047:
-    settermprop_bool(state, VTERM_PROP_ALTSCREEN, val);
+    settermprop_bool(state, FYVT_PROP_ALTSCREEN, val);
     break;
 
   case 1048:
@@ -882,7 +882,7 @@ static void set_dec_mode(VTermState *state, int num, int val)
     break;
 
   case 1049:
-    settermprop_bool(state, VTERM_PROP_ALTSCREEN, val);
+    settermprop_bool(state, FYVT_PROP_ALTSCREEN, val);
     savecursor(state, val);
     break;
 
@@ -891,11 +891,11 @@ static void set_dec_mode(VTermState *state, int num, int val)
     break;
 
   case 2026: // Synchronized output
-    settermprop_bool(state, VTERM_PROP_SYNCOUTPUT, val);
+    settermprop_bool(state, FYVT_PROP_SYNCOUTPUT, val);
     break;
 
   case 2031: // Theme update notifications
-    settermprop_bool(state, VTERM_PROP_THEMEUPDATES, val);
+    settermprop_bool(state, FYVT_PROP_THEMEUPDATES, val);
     break;
 
   default:
@@ -904,7 +904,7 @@ static void set_dec_mode(VTermState *state, int num, int val)
   }
 }
 
-static void request_dec_mode(VTermState *state, int num)
+static void request_dec_mode(struct fyvt_state *state, int num)
 {
   int reply;
 
@@ -982,17 +982,17 @@ static void request_dec_mode(VTermState *state, int num)
       break;
 
     default:
-      vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?%d;%d$y", num, 0);
+      fyvt_push_output_sprintf_ctrl(state->vt, C1_CSI, "?%d;%d$y", num, 0);
       return;
   }
 
-  vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?%d;%d$y", num, reply ? 1 : 2);
+  fyvt_push_output_sprintf_ctrl(state->vt, C1_CSI, "?%d;%d$y", num, reply ? 1 : 2);
 }
 
-static void request_version_string(VTermState *state)
+static void request_version_string(struct fyvt_state *state)
 {
-  vterm_push_output_sprintf_str(state->vt, C1_DCS, true, ">|libvterm(%d.%d)",
-      VTERM_VERSION_MAJOR, VTERM_VERSION_MINOR);
+  fyvt_push_output_sprintf_str(state->vt, C1_DCS, true, ">|libvterm(%d.%d)",
+      FYVT_VERSION_MAJOR, FYVT_VERSION_MINOR);
 }
 
 /* Kitty keyboard protocol flag stack (upstream commit 6f0bde11cc,
@@ -1000,15 +1000,15 @@ static void request_version_string(VTermState *state)
  * queries the top of the stack, CSI > u pushes a new entry, CSI < u pops
  * entries, and CSI = u replaces the top entry. */
 
-static void request_key_encoding_flags(VTermState *state)
+static void request_key_encoding_flags(struct fyvt_state *state)
 {
   int screen = state->mode.alt_screen ? BUFIDX_ALTSCREEN : BUFIDX_PRIMARY;
-  struct VTermKeyEncodingStack *stack = &state->key_encoding_stacks[screen];
+  struct fyvt_key_encoding_stack *stack = &state->key_encoding_stacks[screen];
 
   int reply = 0;
 
   assert(stack->size > 0);
-  VTermKeyEncodingFlags flags = stack->items[stack->size - 1];
+  struct fyvt_key_encoding_flags flags = stack->items[stack->size - 1];
 
   if(flags.disambiguate)
     reply |= KEY_ENCODING_DISAMBIGUATE;
@@ -1021,10 +1021,10 @@ static void request_key_encoding_flags(VTermState *state)
   if(flags.report_associated)
     reply |= KEY_ENCODING_REPORT_ASSOCIATED;
 
-  vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?%du", reply);
+  fyvt_push_output_sprintf_ctrl(state->vt, C1_CSI, "?%du", reply);
 }
 
-static void set_key_encoding_flags(VTermState *state, int arg, int mode)
+static void set_key_encoding_flags(struct fyvt_state *state, int arg, int mode)
 {
   // When mode is 3, bits set in arg reset the corresponding mode
   bool set = mode != 3;
@@ -1032,7 +1032,7 @@ static void set_key_encoding_flags(VTermState *state, int arg, int mode)
   // When mode is 1, unset bits are reset
   bool reset_unset = mode == 1;
 
-  VTermKeyEncodingFlags flags = { 0 };
+  struct fyvt_key_encoding_flags flags = { 0 };
   if(arg & KEY_ENCODING_DISAMBIGUATE)
     flags.disambiguate = set;
   else if(reset_unset)
@@ -1059,15 +1059,15 @@ static void set_key_encoding_flags(VTermState *state, int arg, int mode)
     flags.report_associated = false;
 
   int screen = state->mode.alt_screen ? BUFIDX_ALTSCREEN : BUFIDX_PRIMARY;
-  struct VTermKeyEncodingStack *stack = &state->key_encoding_stacks[screen];
+  struct fyvt_key_encoding_stack *stack = &state->key_encoding_stacks[screen];
   assert(stack->size > 0);
   stack->items[stack->size - 1] = flags;
 }
 
-static void push_key_encoding_flags(VTermState *state, int arg)
+static void push_key_encoding_flags(struct fyvt_state *state, int arg)
 {
   int screen = state->mode.alt_screen ? BUFIDX_ALTSCREEN : BUFIDX_PRIMARY;
-  struct VTermKeyEncodingStack *stack = &state->key_encoding_stacks[screen];
+  struct fyvt_key_encoding_stack *stack = &state->key_encoding_stacks[screen];
   assert(stack->size <= sizeof(stack->items)/sizeof(stack->items[0]));
 
   if(stack->size == sizeof(stack->items)/sizeof(stack->items[0])) {
@@ -1082,10 +1082,10 @@ static void push_key_encoding_flags(VTermState *state, int arg)
   set_key_encoding_flags(state, arg, 1);
 }
 
-static void pop_key_encoding_flags(VTermState *state, int arg)
+static void pop_key_encoding_flags(struct fyvt_state *state, int arg)
 {
   int screen = state->mode.alt_screen ? BUFIDX_ALTSCREEN : BUFIDX_PRIMARY;
-  struct VTermKeyEncodingStack *stack = &state->key_encoding_stacks[screen];
+  struct fyvt_key_encoding_stack *stack = &state->key_encoding_stacks[screen];
   if(arg >= stack->size) {
     stack->size = 1;
 
@@ -1099,7 +1099,7 @@ static void pop_key_encoding_flags(VTermState *state, int arg)
 
 static int on_csi(const char *leader, const long args[], int argcount, const char *intermed, char command, void *user)
 {
-  VTermState *state = user;
+  struct fyvt_state *state = user;
   int leader_byte = 0;
   int intermed_byte = 0;
   int cancel_phantom = 1;
@@ -1137,12 +1137,12 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
     }
   }
 
-  VTermPos oldpos = state->pos;
+  struct fyvt_pos oldpos = state->pos;
 
   // Some temporaries for later code
   int count, val;
   int row, col;
-  VTermRect rect;
+  struct fyvt_rect rect;
   int selective;
 
 #define LBOUND(v,min) if((v) < (min)) (v) = (min)
@@ -1430,11 +1430,11 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
        * (upstream commits 977e91b424 and 112092271b): level 1 VT100
        * emulation (61) plus ANSI color support (22), instead of the
        * original "?1;2c". */
-      vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?61;22;52c");
+      fyvt_push_output_sprintf_ctrl(state->vt, C1_CSI, "?61;22;52c");
     break;
 
   case LEADER('>', 0x63): // DEC secondary Device Attributes
-    vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, ">%d;%d;%dc", 0, 100, 0);
+    fyvt_push_output_sprintf_ctrl(state->vt, C1_CSI, ">%d;%d;%dc", 0, 100, 0);
     break;
 
   case 0x64: // VPA - ECMA-48 8.3.158
@@ -1523,7 +1523,7 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
     break;
 
   case 0x6d: // SGR - ECMA-48 8.3.117
-    vterm_state_setpen(state, args, argcount);
+    fyvt_state_setpen(state, args, argcount);
     break;
 
   case LEADER('?', 0x6d): // DECSGR
@@ -1535,15 +1535,15 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
       switch(arg = CSI_ARG(args[argi])) {
         case 4: // Superscript on
           arg = 73;
-          vterm_state_setpen(state, &arg, 1);
+          fyvt_state_setpen(state, &arg, 1);
           break;
         case 5: // Subscript on
           arg = 74;
-          vterm_state_setpen(state, &arg, 1);
+          fyvt_state_setpen(state, &arg, 1);
           break;
         case 24: // Super+subscript off
           arg = 75;
-          vterm_state_setpen(state, &arg, 1);
+          fyvt_state_setpen(state, &arg, 1);
           break;
       }
     }
@@ -1565,15 +1565,15 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
         // ignore - these are replies
         break;
       case 5:
-        vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "%s0n", qmark);
+        fyvt_push_output_sprintf_ctrl(state->vt, C1_CSI, "%s0n", qmark);
         break;
       case 6: // CPR - cursor position report
-        vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "%s%d;%dR", qmark, state->pos.row + 1, state->pos.col + 1);
+        fyvt_push_output_sprintf_ctrl(state->vt, C1_CSI, "%s%d;%dR", qmark, state->pos.row + 1, state->pos.col + 1);
         break;
       case 996: // XTQTHEME - query the color scheme
         if(state->callbacks && state->callbacks->theme) {
           if(state->callbacks->theme(&dark, state->cbdata))
-            vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?997;%cn", dark ? '1' : '2');
+            fyvt_push_output_sprintf_ctrl(state->vt, C1_CSI, "?997;%cn", dark ? '1' : '2');
         }
         break;
       }
@@ -1582,7 +1582,7 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
 
 
   case INTERMED('!', 0x70): // DECSTR - DEC soft terminal reset
-    vterm_state_reset(state, 0);
+    fyvt_state_reset(state, 0);
     break;
 
   case LEADER('?', INTERMED('$', 0x70)):
@@ -1615,28 +1615,28 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
 
     switch(val) {
     case 0: case 1:
-      settermprop_bool(state, VTERM_PROP_CURSORBLINK, 1);
-      settermprop_int (state, VTERM_PROP_CURSORSHAPE, VTERM_PROP_CURSORSHAPE_BLOCK);
+      settermprop_bool(state, FYVT_PROP_CURSORBLINK, 1);
+      settermprop_int (state, FYVT_PROP_CURSORSHAPE, FYVT_PROP_CURSORSHAPE_BLOCK);
       break;
     case 2:
-      settermprop_bool(state, VTERM_PROP_CURSORBLINK, 0);
-      settermprop_int (state, VTERM_PROP_CURSORSHAPE, VTERM_PROP_CURSORSHAPE_BLOCK);
+      settermprop_bool(state, FYVT_PROP_CURSORBLINK, 0);
+      settermprop_int (state, FYVT_PROP_CURSORSHAPE, FYVT_PROP_CURSORSHAPE_BLOCK);
       break;
     case 3:
-      settermprop_bool(state, VTERM_PROP_CURSORBLINK, 1);
-      settermprop_int (state, VTERM_PROP_CURSORSHAPE, VTERM_PROP_CURSORSHAPE_UNDERLINE);
+      settermprop_bool(state, FYVT_PROP_CURSORBLINK, 1);
+      settermprop_int (state, FYVT_PROP_CURSORSHAPE, FYVT_PROP_CURSORSHAPE_UNDERLINE);
       break;
     case 4:
-      settermprop_bool(state, VTERM_PROP_CURSORBLINK, 0);
-      settermprop_int (state, VTERM_PROP_CURSORSHAPE, VTERM_PROP_CURSORSHAPE_UNDERLINE);
+      settermprop_bool(state, FYVT_PROP_CURSORBLINK, 0);
+      settermprop_int (state, FYVT_PROP_CURSORSHAPE, FYVT_PROP_CURSORSHAPE_UNDERLINE);
       break;
     case 5:
-      settermprop_bool(state, VTERM_PROP_CURSORBLINK, 1);
-      settermprop_int (state, VTERM_PROP_CURSORSHAPE, VTERM_PROP_CURSORSHAPE_BAR_LEFT);
+      settermprop_bool(state, FYVT_PROP_CURSORBLINK, 1);
+      settermprop_int (state, FYVT_PROP_CURSORSHAPE, FYVT_PROP_CURSORSHAPE_BAR_LEFT);
       break;
     case 6:
-      settermprop_bool(state, VTERM_PROP_CURSORBLINK, 0);
-      settermprop_int (state, VTERM_PROP_CURSORSHAPE, VTERM_PROP_CURSORSHAPE_BAR_LEFT);
+      settermprop_bool(state, FYVT_PROP_CURSORBLINK, 0);
+      settermprop_int (state, FYVT_PROP_CURSORSHAPE, FYVT_PROP_CURSORSHAPE_BAR_LEFT);
       break;
     }
 
@@ -1820,7 +1820,7 @@ static uint8_t unbase64one(char c)
   return 0xFF;
 }
 
-static void osc_selection(VTermState *state, VTermStringFragment frag)
+static void osc_selection(struct fyvt_state *state, struct fyvt_string_fragment frag)
 {
   if(frag.initial) {
     state->tmp.selection.mask = 0;
@@ -1831,16 +1831,16 @@ static void osc_selection(VTermState *state, VTermStringFragment frag)
     /* Parse selection parameter */
     switch(frag.str[0]) {
       case 'c':
-        state->tmp.selection.mask |= VTERM_SELECTION_CLIPBOARD;
+        state->tmp.selection.mask |= FYVT_SELECTION_CLIPBOARD;
         break;
       case 'p':
-        state->tmp.selection.mask |= VTERM_SELECTION_PRIMARY;
+        state->tmp.selection.mask |= FYVT_SELECTION_PRIMARY;
         break;
       case 'q':
-        state->tmp.selection.mask |= VTERM_SELECTION_SECONDARY;
+        state->tmp.selection.mask |= FYVT_SELECTION_SECONDARY;
         break;
       case 's':
-        state->tmp.selection.mask |= VTERM_SELECTION_SELECT;
+        state->tmp.selection.mask |= FYVT_SELECTION_SELECT;
         break;
       case '0':
       case '1':
@@ -1850,13 +1850,13 @@ static void osc_selection(VTermState *state, VTermStringFragment frag)
       case '5':
       case '6':
       case '7':
-        state->tmp.selection.mask |= (VTERM_SELECTION_CUT0 << (frag.str[0] - '0'));
+        state->tmp.selection.mask |= (FYVT_SELECTION_CUT0 << (frag.str[0] - '0'));
         break;
 
       case ';':
         state->tmp.selection.state = SELECTION_SELECTED;
         if(!state->tmp.selection.mask)
-          state->tmp.selection.mask = VTERM_SELECTION_SELECT|VTERM_SELECTION_CUT0;
+          state->tmp.selection.mask = FYVT_SELECTION_SELECT|FYVT_SELECTION_CUT0;
         break;
     }
 
@@ -1867,7 +1867,7 @@ static void osc_selection(VTermState *state, VTermStringFragment frag)
   if(!frag.len) {
     /* Clear selection if we're already finished but didn't do anything */
     if(frag.final && state->selection.callbacks->set) {
-      (*state->selection.callbacks->set)(state->tmp.selection.mask, (VTermStringFragment){
+      (*state->selection.callbacks->set)(state->tmp.selection.mask, (struct fyvt_string_fragment){
               .str     = NULL,
               .len     = 0,
               .initial = state->tmp.selection.state != SELECTION_SET,
@@ -1934,7 +1934,7 @@ static void osc_selection(VTermState *state, VTermStringFragment frag)
 
           state->tmp.selection.state = SELECTION_INVALID;
           if(state->selection.callbacks->set) {
-            (*state->selection.callbacks->set)(state->tmp.selection.mask, (VTermStringFragment){
+            (*state->selection.callbacks->set)(state->tmp.selection.mask, (struct fyvt_string_fragment){
                 .str     = NULL,
                 .len     = 0,
                 .initial = true,
@@ -1961,7 +1961,7 @@ static void osc_selection(VTermState *state, VTermStringFragment frag)
 
       if(!frag.len || (state->selection.buflen - bufcur) < 3) {
         if(bufcur) {
-          (*state->selection.callbacks->set)(state->tmp.selection.mask, (VTermStringFragment){
+          (*state->selection.callbacks->set)(state->tmp.selection.mask, (struct fyvt_string_fragment){
               .str     = state->selection.buffer,
               .len     = bufcur,
               .initial = state->tmp.selection.state == SELECTION_SET_INITIAL,
@@ -1985,22 +1985,22 @@ static void osc_selection(VTermState *state, VTermStringFragment frag)
  * commands used to return immediately, so a caller's osc fallback never saw
  * them. Fall through to the fallback for every command, recognized or not,
  * instead of only for the ones libvterm itself does not understand. */
-static int on_osc(int command, VTermStringFragment frag, void *user)
+static int on_osc(int command, struct fyvt_string_fragment frag, void *user)
 {
-  VTermState *state = user;
+  struct fyvt_state *state = user;
 
   switch(command) {
     case 0:
-      settermprop_string(state, VTERM_PROP_ICONNAME, frag);
-      settermprop_string(state, VTERM_PROP_TITLE, frag);
+      settermprop_string(state, FYVT_PROP_ICONNAME, frag);
+      settermprop_string(state, FYVT_PROP_TITLE, frag);
       break;
 
     case 1:
-      settermprop_string(state, VTERM_PROP_ICONNAME, frag);
+      settermprop_string(state, FYVT_PROP_ICONNAME, frag);
       break;
 
     case 2:
-      settermprop_string(state, VTERM_PROP_TITLE, frag);
+      settermprop_string(state, FYVT_PROP_TITLE, frag);
       break;
 
     case 52:
@@ -2016,9 +2016,9 @@ static int on_osc(int command, VTermStringFragment frag, void *user)
   return 0;
 }
 
-static void request_status_string(VTermState *state, VTermStringFragment frag)
+static void request_status_string(struct fyvt_state *state, struct fyvt_string_fragment frag)
 {
-  VTerm *vt = state->vt;
+  struct fyvt *vt = state->vt;
 
   char *tmp = state->tmp.decrqss;
 
@@ -2039,7 +2039,7 @@ static void request_status_string(VTermState *state, VTermStringFragment frag)
     case 'm': {
       // Query SGR
       long args[20];
-      int argc = vterm_state_getpen(state, args, sizeof(args)/sizeof(args[0]));
+      int argc = fyvt_state_getpen(state, args, sizeof(args)/sizeof(args[0]));
       size_t cur = 0;
 
       cur += snprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur,
@@ -2062,19 +2062,19 @@ static void request_status_string(VTermState *state, VTermStringFragment frag)
       if(cur >= vt->tmpbuffer_len)
         return;
 
-      vterm_push_output_bytes(vt, vt->tmpbuffer, cur);
+      fyvt_push_output_bytes(vt, vt->tmpbuffer, cur);
       return;
     }
 
     case 'r':
       // Query DECSTBM
-      vterm_push_output_sprintf_str(vt, C1_DCS, true,
+      fyvt_push_output_sprintf_str(vt, C1_DCS, true,
           "1$r%d;%dr", state->scrollregion_top+1, SCROLLREGION_BOTTOM(state));
       return;
 
     case 's':
       // Query DECSLRM
-      vterm_push_output_sprintf_str(vt, C1_DCS, true,
+      fyvt_push_output_sprintf_str(vt, C1_DCS, true,
           "1$r%d;%ds", SCROLLREGION_LEFT(state)+1, SCROLLREGION_RIGHT(state));
       return;
 
@@ -2085,30 +2085,30 @@ static void request_status_string(VTermState *state, VTermStringFragment frag)
        * future shape is added without updating this switch. */
       int reply = 2;
       switch(state->mode.cursor_shape) {
-        case VTERM_PROP_CURSORSHAPE_BLOCK:     reply = 2; break;
-        case VTERM_PROP_CURSORSHAPE_UNDERLINE: reply = 4; break;
-        case VTERM_PROP_CURSORSHAPE_BAR_LEFT:  reply = 6; break;
+        case FYVT_PROP_CURSORSHAPE_BLOCK:     reply = 2; break;
+        case FYVT_PROP_CURSORSHAPE_UNDERLINE: reply = 4; break;
+        case FYVT_PROP_CURSORSHAPE_BAR_LEFT:  reply = 6; break;
       }
       if(state->mode.cursor_blink)
         reply--;
-      vterm_push_output_sprintf_str(vt, C1_DCS, true,
+      fyvt_push_output_sprintf_str(vt, C1_DCS, true,
           "1$r%d q", reply);
       return;
     }
 
     case '\"'|('q'<<8):
       // Query DECSCA
-      vterm_push_output_sprintf_str(vt, C1_DCS, true,
+      fyvt_push_output_sprintf_str(vt, C1_DCS, true,
           "1$r%d\"q", state->protected_cell ? 1 : 2);
       return;
   }
 
-  vterm_push_output_sprintf_str(state->vt, C1_DCS, true, "0$r");
+  fyvt_push_output_sprintf_str(state->vt, C1_DCS, true, "0$r");
 }
 
-static int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, void *user)
+static int on_dcs(const char *command, size_t commandlen, struct fyvt_string_fragment frag, void *user)
 {
-  VTermState *state = user;
+  struct fyvt_state *state = user;
 
   if(commandlen == 2 && strneq(command, "$q", 2)) {
     request_status_string(state, frag);
@@ -2122,9 +2122,9 @@ static int on_dcs(const char *command, size_t commandlen, VTermStringFragment fr
   return 0;
 }
 
-static int on_apc(VTermStringFragment frag, void *user)
+static int on_apc(struct fyvt_string_fragment frag, void *user)
 {
-  VTermState *state = user;
+  struct fyvt_state *state = user;
 
   if(state->fallbacks && state->fallbacks->apc)
     if((*state->fallbacks->apc)(frag, state->fbdata))
@@ -2134,9 +2134,9 @@ static int on_apc(VTermStringFragment frag, void *user)
   return 0;
 }
 
-static int on_pm(VTermStringFragment frag, void *user)
+static int on_pm(struct fyvt_string_fragment frag, void *user)
 {
-  VTermState *state = user;
+  struct fyvt_state *state = user;
 
   if(state->fallbacks && state->fallbacks->pm)
     if((*state->fallbacks->pm)(frag, state->fbdata))
@@ -2146,9 +2146,9 @@ static int on_pm(VTermStringFragment frag, void *user)
   return 0;
 }
 
-static int on_sos(VTermStringFragment frag, void *user)
+static int on_sos(struct fyvt_string_fragment frag, void *user)
 {
-  VTermState *state = user;
+  struct fyvt_state *state = user;
 
   if(state->fallbacks && state->fallbacks->sos)
     if((*state->fallbacks->sos)(frag, state->fbdata))
@@ -2160,11 +2160,11 @@ static int on_sos(VTermStringFragment frag, void *user)
 
 static int on_resize(int rows, int cols, void *user)
 {
-  VTermState *state = user;
-  VTermPos oldpos = state->pos;
+  struct fyvt_state *state = user;
+  struct fyvt_pos oldpos = state->pos;
 
   if(cols != state->cols) {
-    unsigned char *newtabstops = vterm_allocator_malloc(state->vt, (cols + 7) / 8);
+    unsigned char *newtabstops = fyvt_allocator_malloc(state->vt, (cols + 7) / 8);
 
     /* TODO: This can all be done much more efficiently bytewise */
     int col;
@@ -2184,7 +2184,7 @@ static int on_resize(int rows, int cols, void *user)
         newtabstops[col >> 3] &= ~mask;
     }
 
-    vterm_allocator_free(state->vt, state->tabstops);
+    fyvt_allocator_free(state->vt, state->tabstops);
     state->tabstops = newtabstops;
   }
 
@@ -2196,7 +2196,7 @@ static int on_resize(int rows, int cols, void *user)
   if(state->scrollregion_right > -1)
     UBOUND(state->scrollregion_right, state->cols);
 
-  VTermStateFields fields = {
+  struct fyvt_state_fields fields = {
     .pos       = state->pos,
     .lineinfos = { [0] = state->lineinfos[0], [1] = state->lineinfos[1] },
   };
@@ -2211,11 +2211,11 @@ static int on_resize(int rows, int cols, void *user)
   else {
     if(rows != state->rows) {
       for(int bufidx = BUFIDX_PRIMARY; bufidx <= BUFIDX_ALTSCREEN; bufidx++) {
-        VTermLineInfo *oldlineinfo = state->lineinfos[bufidx];
+        struct fyvt_line_info *oldlineinfo = state->lineinfos[bufidx];
         if(!oldlineinfo)
           continue;
 
-        VTermLineInfo *newlineinfo = vterm_allocator_malloc(state->vt, rows * sizeof(VTermLineInfo));
+        struct fyvt_line_info *newlineinfo = fyvt_allocator_malloc(state->vt, rows * sizeof(struct fyvt_line_info));
 
         int row;
         for(row = 0; row < state->rows && row < rows; row++) {
@@ -2223,12 +2223,12 @@ static int on_resize(int rows, int cols, void *user)
         }
 
         for( ; row < rows; row++) {
-          newlineinfo[row] = (VTermLineInfo){
+          newlineinfo[row] = (struct fyvt_line_info){
             .doublewidth = 0,
           };
         }
 
-        vterm_allocator_free(state->vt, state->lineinfos[bufidx]);
+        fyvt_allocator_free(state->vt, state->lineinfos[bufidx]);
         state->lineinfos[bufidx] = newlineinfo;
       }
     }
@@ -2255,7 +2255,7 @@ static int on_resize(int rows, int cols, void *user)
   return 1;
 }
 
-static const VTermParserCallbacks parser_callbacks = {
+static const struct fyvt_parser_callbacks parser_callbacks = {
   .text    = on_text,
   .control = on_control,
   .escape  = on_escape,
@@ -2268,20 +2268,20 @@ static const VTermParserCallbacks parser_callbacks = {
   .resize  = on_resize,
 };
 
-VTermState *vterm_obtain_state(VTerm *vt)
+struct fyvt_state *fyvt_obtain_state(struct fyvt *vt)
 {
   if(vt->state)
     return vt->state;
 
-  VTermState *state = vterm_state_new(vt);
+  struct fyvt_state *state = fyvt_state_new(vt);
   vt->state = state;
 
-  vterm_parser_set_callbacks(vt, &parser_callbacks, state);
+  fyvt_parser_set_callbacks(vt, &parser_callbacks, state);
 
   return state;
 }
 
-void vterm_state_reset(VTermState *state, int hard)
+void fyvt_state_reset(struct fyvt_state *state, int hard)
 {
   state->scrollregion_top = 0;
   state->scrollregion_bottom = -1;
@@ -2315,11 +2315,11 @@ void vterm_state_reset(VTermState *state, int hard)
   if(state->callbacks && state->callbacks->initpen)
     (*state->callbacks->initpen)(state->cbdata);
 
-  vterm_state_resetpen(state);
+  fyvt_state_resetpen(state);
 
-  VTermEncoding *default_enc = state->vt->mode.utf8 ?
-      vterm_lookup_encoding(ENC_UTF8,      'u') :
-      vterm_lookup_encoding(ENC_SINGLE_94, 'B');
+  struct fyvt_encoding *default_enc = state->vt->mode.utf8 ?
+      fyvt_lookup_encoding(ENC_UTF8,      'u') :
+      fyvt_lookup_encoding(ENC_SINGLE_94, 'B');
 
   for(int i = 0; i < 4; i++) {
     state->encoding[i].enc = default_enc;
@@ -2334,26 +2334,26 @@ void vterm_state_reset(VTermState *state, int hard)
   state->protected_cell = 0;
 
   // Initialise the props
-  settermprop_bool(state, VTERM_PROP_CURSORVISIBLE, 1);
-  settermprop_bool(state, VTERM_PROP_CURSORBLINK,   1);
-  settermprop_int (state, VTERM_PROP_CURSORSHAPE,   VTERM_PROP_CURSORSHAPE_BLOCK);
+  settermprop_bool(state, FYVT_PROP_CURSORVISIBLE, 1);
+  settermprop_bool(state, FYVT_PROP_CURSORBLINK,   1);
+  settermprop_int (state, FYVT_PROP_CURSORSHAPE,   FYVT_PROP_CURSORSHAPE_BLOCK);
 
   if(hard) {
     state->pos.row = 0;
     state->pos.col = 0;
     state->at_phantom = 0;
 
-    VTermRect rect = { 0, state->rows, 0, state->cols };
+    struct fyvt_rect rect = { 0, state->rows, 0, state->cols };
     erase(state, rect, 0);
   }
 }
 
-void vterm_state_get_cursorpos(const VTermState *state, VTermPos *cursorpos)
+void fyvt_state_get_cursorpos(const struct fyvt_state *state, struct fyvt_pos *cursorpos)
 {
   *cursorpos = state->pos;
 }
 
-void vterm_state_set_callbacks(VTermState *state, const VTermStateCallbacks *callbacks, void *user)
+void fyvt_state_set_callbacks(struct fyvt_state *state, const struct fyvt_state_callbacks *callbacks, void *user)
 {
   if(callbacks) {
     state->callbacks = callbacks;
@@ -2368,17 +2368,17 @@ void vterm_state_set_callbacks(VTermState *state, const VTermStateCallbacks *cal
   }
 }
 
-void vterm_state_callbacks_has_premove(VTermState *state)
+void fyvt_state_callbacks_has_premove(struct fyvt_state *state)
 {
   state->callbacks_has_premove = true;
 }
 
-void *vterm_state_get_cbdata(VTermState *state)
+void *fyvt_state_get_cbdata(struct fyvt_state *state)
 {
   return state->cbdata;
 }
 
-void vterm_state_set_unrecognised_fallbacks(VTermState *state, const VTermStateFallbacks *fallbacks, void *user)
+void fyvt_state_set_unrecognised_fallbacks(struct fyvt_state *state, const struct fyvt_state_fallbacks *fallbacks, void *user)
 {
   if(fallbacks) {
     state->fallbacks = fallbacks;
@@ -2390,12 +2390,12 @@ void vterm_state_set_unrecognised_fallbacks(VTermState *state, const VTermStateF
   }
 }
 
-void *vterm_state_get_unrecognised_fbdata(VTermState *state)
+void *fyvt_state_get_unrecognised_fbdata(struct fyvt_state *state)
 {
   return state->fbdata;
 }
 
-int vterm_state_set_termprop(VTermState *state, VTermProp prop, VTermValue *val)
+int fyvt_state_set_termprop(struct fyvt_state *state, enum fyvt_prop prop, union fyvt_value *val)
 {
   /* Only store the new value of the property if usercode said it was happy.
    * This is especially important for altscreen switching */
@@ -2404,27 +2404,27 @@ int vterm_state_set_termprop(VTermState *state, VTermProp prop, VTermValue *val)
       return 0;
 
   switch(prop) {
-  case VTERM_PROP_TITLE:
-  case VTERM_PROP_ICONNAME:
+  case FYVT_PROP_TITLE:
+  case FYVT_PROP_ICONNAME:
     // we don't store these, just transparently pass through
     return 1;
-  case VTERM_PROP_CURSORVISIBLE:
+  case FYVT_PROP_CURSORVISIBLE:
     state->mode.cursor_visible = val->boolean;
     return 1;
-  case VTERM_PROP_CURSORBLINK:
+  case FYVT_PROP_CURSORBLINK:
     state->mode.cursor_blink = val->boolean;
     return 1;
-  case VTERM_PROP_CURSORSHAPE:
+  case FYVT_PROP_CURSORSHAPE:
     state->mode.cursor_shape = val->number;
     return 1;
-  case VTERM_PROP_REVERSE:
+  case FYVT_PROP_REVERSE:
     state->mode.screen = val->boolean;
     return 1;
-  case VTERM_PROP_ALTSCREEN:
+  case FYVT_PROP_ALTSCREEN:
     state->mode.alt_screen = val->boolean;
     state->lineinfo = state->lineinfos[state->mode.alt_screen ? BUFIDX_ALTSCREEN : BUFIDX_PRIMARY];
     if(state->mode.alt_screen) {
-      VTermRect rect = {
+      struct fyvt_rect rect = {
         .start_row = 0,
         .start_col = 0,
         .end_row = state->rows,
@@ -2433,60 +2433,60 @@ int vterm_state_set_termprop(VTermState *state, VTermProp prop, VTermValue *val)
       erase(state, rect, 0);
     }
     return 1;
-  case VTERM_PROP_MOUSE:
+  case FYVT_PROP_MOUSE:
     state->mouse_flags = 0;
     if(val->number)
       state->mouse_flags |= MOUSE_WANT_CLICK;
-    if(val->number == VTERM_PROP_MOUSE_DRAG)
+    if(val->number == FYVT_PROP_MOUSE_DRAG)
       state->mouse_flags |= MOUSE_WANT_DRAG;
-    if(val->number == VTERM_PROP_MOUSE_MOVE)
+    if(val->number == FYVT_PROP_MOUSE_MOVE)
       state->mouse_flags |= MOUSE_WANT_MOVE;
     return 1;
-  case VTERM_PROP_FOCUSREPORT:
+  case FYVT_PROP_FOCUSREPORT:
     state->mode.report_focus = val->boolean;
     return 1;
-  case VTERM_PROP_THEMEUPDATES:
+  case FYVT_PROP_THEMEUPDATES:
     state->mode.theme_updates = val->boolean;
     return 1;
-  case VTERM_PROP_SYNCOUTPUT:
+  case FYVT_PROP_SYNCOUTPUT:
     state->mode.synchronized_output = val->boolean;
     return 1;
 
-  case VTERM_N_PROPS:
+  case FYVT_N_PROPS:
     return 0;
   }
 
   return 0;
 }
 
-void vterm_state_focus_in(VTermState *state)
+void fyvt_state_focus_in(struct fyvt_state *state)
 {
   if(state->mode.report_focus)
-    vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "I");
+    fyvt_push_output_sprintf_ctrl(state->vt, C1_CSI, "I");
 }
 
-void vterm_state_focus_out(VTermState *state)
+void fyvt_state_focus_out(struct fyvt_state *state)
 {
   if(state->mode.report_focus)
-    vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "O");
+    fyvt_push_output_sprintf_ctrl(state->vt, C1_CSI, "O");
 }
 
-const VTermLineInfo *vterm_state_get_lineinfo(const VTermState *state, int row)
+const struct fyvt_line_info *fyvt_state_get_lineinfo(const struct fyvt_state *state, int row)
 {
   return state->lineinfo + row;
 }
 
-void vterm_state_set_selection_callbacks(VTermState *state, const VTermSelectionCallbacks *callbacks, void *user,
+void fyvt_state_set_selection_callbacks(struct fyvt_state *state, const struct fyvt_selection_callbacks *callbacks, void *user,
     char *buffer, size_t buflen)
 {
   bool owned = false;
 
   /* Replacing an earlier buffer we allocated ourselves. */
   if(state->selection.buffer_owned)
-    vterm_allocator_free(state->vt, state->selection.buffer);
+    fyvt_allocator_free(state->vt, state->selection.buffer);
 
   if(buflen && !buffer) {
-    buffer = vterm_allocator_malloc(state->vt, buflen);
+    buffer = fyvt_allocator_malloc(state->vt, buflen);
     owned = true;
   }
 
@@ -2497,9 +2497,9 @@ void vterm_state_set_selection_callbacks(VTermState *state, const VTermSelection
   state->selection.buffer_owned = owned;
 }
 
-void vterm_state_send_selection(VTermState *state, VTermSelectionMask mask, VTermStringFragment frag)
+void fyvt_state_send_selection(struct fyvt_state *state, enum fyvt_selection_mask mask, struct fyvt_string_fragment frag)
 {
-  VTerm *vt = state->vt;
+  struct fyvt *vt = state->vt;
 
   if(frag.initial) {
     /* TODO: support sending more than one mask bit */
@@ -2509,7 +2509,7 @@ void vterm_state_send_selection(VTermState *state, VTermSelectionMask mask, VTer
       if(mask & (1 << idx))
         break;
 
-    vterm_push_output_sprintf_str(vt, C1_OSC, false, "52;%c;", selection_chars[idx]);
+    fyvt_push_output_sprintf_str(vt, C1_OSC, false, "52;%c;", selection_chars[idx]);
 
     state->tmp.selection.sendpartial = 0;
   }
@@ -2546,7 +2546,7 @@ void vterm_state_send_selection(VTermState *state, VTermSelectionMask mask, VTer
 
       if(!frag.len || (state->selection.buflen - bufcur) < 4) {
         if(bufcur)
-          vterm_push_output_bytes(vt, state->selection.buffer, bufcur);
+          fyvt_push_output_bytes(vt, state->selection.buffer, bufcur);
 
         buffer = state->selection.buffer;
         bufcur = 0;
@@ -2571,9 +2571,9 @@ void vterm_state_send_selection(VTermState *state, VTermSelectionMask mask, VTer
       buffer[2] = (n == 1) ? '=' : base64_one((x >>  6) & 0x3F);
       buffer[3] = '=';
 
-      vterm_push_output_sprintf_str(vt, 0, true, "%.*s", 4, buffer);
+      fyvt_push_output_sprintf_str(vt, 0, true, "%.*s", 4, buffer);
     }
     else
-      vterm_push_output_sprintf_str(vt, 0, true, "");
+      fyvt_push_output_sprintf_str(vt, 0, true, "");
   }
 }

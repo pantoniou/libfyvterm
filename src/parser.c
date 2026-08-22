@@ -1,4 +1,4 @@
-#include "vterm_internal.h"
+#include "fyvt_internal.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -10,7 +10,7 @@ static bool is_intermed(unsigned char c)
   return c >= 0x20 && c <= 0x2f;
 }
 
-static void do_control(VTerm *vt, unsigned char control)
+static void do_control(struct fyvt *vt, unsigned char control)
 {
   if(vt->parser.callbacks && vt->parser.callbacks->control)
     if((*vt->parser.callbacks->control)(control, vt->parser.cbdata))
@@ -19,7 +19,7 @@ static void do_control(VTerm *vt, unsigned char control)
   DEBUG_LOG("libvterm: Unhandled control 0x%02x\n", control);
 }
 
-static void do_csi(VTerm *vt, char command)
+static void do_csi(struct fyvt *vt, char command)
 {
 #ifdef DEBUG_PARSER
   printf("Parsed CSI args as:\n", arglen, args);
@@ -45,7 +45,7 @@ static void do_csi(VTerm *vt, char command)
   DEBUG_LOG("libvterm: Unhandled CSI %c\n", command);
 }
 
-static void do_escape(VTerm *vt, char command)
+static void do_escape(struct fyvt *vt, char command)
 {
   char seq[INTERMED_MAX+1];
 
@@ -65,10 +65,10 @@ static void do_escape(VTerm *vt, char command)
  * "feat(terminal): include sequence terminator in TermRequest event"): a
  * caller cannot otherwise tell whether the query it is replying to used BEL
  * or ST, and a reply should echo the same terminator back. */
-static void string_fragment(VTerm *vt, const char *str, size_t len, bool final,
-                             VTermTerminator terminator)
+static void string_fragment(struct fyvt *vt, const char *str, size_t len, bool final,
+                             enum fyvt_terminator terminator)
 {
-  VTermStringFragment frag = {
+  struct fyvt_string_fragment frag = {
     .str     = str,
     .len     = len,
     .initial = vt->parser.string_initial,
@@ -119,7 +119,7 @@ static void string_fragment(VTerm *vt, const char *str, size_t len, bool final,
   vt->parser.string_initial = false;
 }
 
-size_t vterm_input_write(VTerm *vt, const char *bytes, size_t len)
+size_t fyvt_input_write(struct fyvt *vt, const char *bytes, size_t len)
 {
   size_t pos = 0;
   const char *string_start = NULL;
@@ -154,7 +154,7 @@ size_t vterm_input_write(VTerm *vt, const char *bytes, size_t len)
     if(c == 0x00 || c == 0x7f) { // NUL, DEL
       if(IS_STRING_STATE()) {
         string_fragment(vt, string_start, bytes + pos - string_start, false,
-                         VTERM_TERMINATOR_ST);
+                         FYVT_TERMINATOR_ST);
         string_start = bytes + pos + 1;
       }
       if(vt->parser.emit_nul)
@@ -185,7 +185,7 @@ size_t vterm_input_write(VTerm *vt, const char *bytes, size_t len)
 
       if(IS_STRING_STATE())
         string_fragment(vt, string_start, bytes + pos - string_start, false,
-                         VTERM_TERMINATOR_ST);
+                         FYVT_TERMINATOR_ST);
       do_control(vt, c);
       if(IS_STRING_STATE())
         string_start = bytes + pos + 1;
@@ -312,7 +312,7 @@ string_state:
     case SOS:
       if(c == 0x07 || (c1_allowed && c == 0x9c)) {
         string_fragment(vt, string_start, string_len, true,
-                         c == 0x07 ? VTERM_TERMINATOR_BEL : VTERM_TERMINATOR_ST);
+                         c == 0x07 ? FYVT_TERMINATOR_BEL : FYVT_TERMINATOR_ST);
         ENTER_NORMAL_STATE();
       }
       break;
@@ -394,24 +394,24 @@ string_state:
     size_t string_len = bytes + pos - string_start;
     if(vt->parser.in_esc)
       string_len -= 1;
-    string_fragment(vt, string_start, string_len, false, VTERM_TERMINATOR_ST);
+    string_fragment(vt, string_start, string_len, false, FYVT_TERMINATOR_ST);
   }
 
   return len;
 }
 
-void vterm_parser_set_callbacks(VTerm *vt, const VTermParserCallbacks *callbacks, void *user)
+void fyvt_parser_set_callbacks(struct fyvt *vt, const struct fyvt_parser_callbacks *callbacks, void *user)
 {
   vt->parser.callbacks = callbacks;
   vt->parser.cbdata = user;
 }
 
-void *vterm_parser_get_cbdata(VTerm *vt)
+void *fyvt_parser_get_cbdata(struct fyvt *vt)
 {
   return vt->parser.cbdata;
 }
 
-void vterm_parser_set_emit_nul(VTerm *vt, bool emit)
+void fyvt_parser_set_emit_nul(struct fyvt *vt, bool emit)
 {
   vt->parser.emit_nul = emit;
 }

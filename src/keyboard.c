@@ -1,4 +1,4 @@
-#include "vterm_internal.h"
+#include "fyvt_internal.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -9,44 +9,44 @@
  * 6f0bde11cc, "feat(terminal): add support for kitty keyboard protocol").
  * Only the first mode ("Disambiguate escape codes") is implemented.
  * https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement */
-static VTermKeyEncodingFlags vterm_state_get_key_encoding_flags(const VTermState *state)
+static struct fyvt_key_encoding_flags fyvt_state_get_key_encoding_flags(const struct fyvt_state *state)
 {
   int screen = state->mode.alt_screen ? BUFIDX_ALTSCREEN : BUFIDX_PRIMARY;
-  const struct VTermKeyEncodingStack *stack = &state->key_encoding_stacks[screen];
+  const struct fyvt_key_encoding_stack *stack = &state->key_encoding_stacks[screen];
   assert(stack->size > 0);
   return stack->items[stack->size - 1];
 }
 
-void vterm_keyboard_unichar(VTerm *vt, uint32_t c, VTermModifier mod)
+void fyvt_keyboard_unichar(struct fyvt *vt, uint32_t c, enum fyvt_modifier mod)
 {
   bool passthru;
   if(c == ' ')
     /* Space is passed through only when there are no modifiers (including shift) */
-    passthru = mod == VTERM_MOD_NONE;
+    passthru = mod == FYVT_MOD_NONE;
   else
     /* Otherwise pass through when there are no modifiers (ignoring shift) */
-    passthru = (mod & ~VTERM_MOD_SHIFT) == 0;
+    passthru = (mod & ~FYVT_MOD_SHIFT) == 0;
 
   if(passthru) {
     char str[6];
     int seqlen = fill_utf8(c, str);
-    vterm_push_output_bytes(vt, str, seqlen);
+    fyvt_push_output_bytes(vt, str, seqlen);
     return;
   }
 
-  VTermKeyEncodingFlags flags = vterm_state_get_key_encoding_flags(vt->state);
+  struct fyvt_key_encoding_flags flags = fyvt_state_get_key_encoding_flags(vt->state);
   if(flags.disambiguate) {
     /* Always use the unshifted codepoint */
     if(c >= 'A' && c <= 'Z') {
       c += 'a' - 'A';
-      mod |= VTERM_MOD_SHIFT;
+      mod |= FYVT_MOD_SHIFT;
     }
 
-    vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%d;%du", c, mod+1);
+    fyvt_push_output_sprintf_ctrl(vt, C1_CSI, "%d;%du", c, mod+1);
     return;
   }
 
-  if(mod & VTERM_MOD_CTRL) {
+  if(mod & FYVT_MOD_CTRL) {
     /* Handle special cases. These are taken from kitty, but seem mostly
      * consistent across terminals. */
     switch(c) {
@@ -76,7 +76,7 @@ void vterm_keyboard_unichar(VTerm *vt, uint32_t c, VTermModifier mod)
     }
   }
 
-  vterm_push_output_sprintf(vt, "%s%c", mod & VTERM_MOD_ALT ? ESC_S : "", c);
+  fyvt_push_output_sprintf(vt, "%s%c", mod & FYVT_MOD_ALT ? ESC_S : "", c);
 }
 
 typedef struct {
@@ -176,29 +176,29 @@ static keycodes_s keycodes_kp_csiu[] = {
   { KEYCODE_KEYPAD, 57415, 'X' }, // KP_EQUAL
 };
 
-void vterm_keyboard_key(VTerm *vt, VTermKey key, VTermModifier mod)
+void fyvt_keyboard_key(struct fyvt *vt, enum fyvt_key key, enum fyvt_modifier mod)
 {
-  if(key == VTERM_KEY_NONE)
+  if(key == FYVT_KEY_NONE)
     return;
 
-  VTermKeyEncodingFlags flags = vterm_state_get_key_encoding_flags(vt->state);
+  struct fyvt_key_encoding_flags flags = fyvt_state_get_key_encoding_flags(vt->state);
 
   keycodes_s k;
-  if(key < VTERM_KEY_FUNCTION_0) {
+  if(key < FYVT_KEY_FUNCTION_0) {
     if(key >= sizeof(keycodes)/sizeof(keycodes[0]))
       return;
     k = keycodes[key];
   }
-  else if(key >= VTERM_KEY_FUNCTION_0 && key <= VTERM_KEY_FUNCTION_MAX) {
-    if((key - VTERM_KEY_FUNCTION_0) >= sizeof(keycodes_fn)/sizeof(keycodes_fn[0]))
+  else if(key >= FYVT_KEY_FUNCTION_0 && key <= FYVT_KEY_FUNCTION_MAX) {
+    if((key - FYVT_KEY_FUNCTION_0) >= sizeof(keycodes_fn)/sizeof(keycodes_fn[0]))
       return;
-    k = keycodes_fn[key - VTERM_KEY_FUNCTION_0];
+    k = keycodes_fn[key - FYVT_KEY_FUNCTION_0];
   }
-  else if(key >= VTERM_KEY_KP_0) {
-    if((key - VTERM_KEY_KP_0) >= sizeof(keycodes_kp)/sizeof(keycodes_kp[0]))
+  else if(key >= FYVT_KEY_KP_0) {
+    if((key - FYVT_KEY_KP_0) >= sizeof(keycodes_kp)/sizeof(keycodes_kp[0]))
       return;
-    k = flags.disambiguate ? keycodes_kp_csiu[key - VTERM_KEY_KP_0]
-                            : keycodes_kp[key - VTERM_KEY_KP_0];
+    k = flags.disambiguate ? keycodes_kp_csiu[key - FYVT_KEY_KP_0]
+                            : keycodes_kp[key - FYVT_KEY_KP_0];
   }
 
   switch(k.type) {
@@ -209,10 +209,10 @@ void vterm_keyboard_key(VTerm *vt, VTermKey key, VTermModifier mod)
     /* Shift-Tab is CSI Z but plain Tab is 0x09 */
     if(flags.disambiguate)
       goto case_LITERAL;
-    else if(mod == VTERM_MOD_SHIFT)
-      vterm_push_output_sprintf_ctrl(vt, C1_CSI, "Z");
-    else if(mod & VTERM_MOD_SHIFT)
-      vterm_push_output_sprintf_ctrl(vt, C1_CSI, "1;%dZ", mod+1);
+    else if(mod == FYVT_MOD_SHIFT)
+      fyvt_push_output_sprintf_ctrl(vt, C1_CSI, "Z");
+    else if(mod & FYVT_MOD_SHIFT)
+      fyvt_push_output_sprintf_ctrl(vt, C1_CSI, "1;%dZ", mod+1);
     else
       goto case_LITERAL;
     break;
@@ -220,7 +220,7 @@ void vterm_keyboard_key(VTerm *vt, VTermKey key, VTermModifier mod)
   case KEYCODE_ENTER:
     /* Enter is CRLF in newline mode, but just LF in linefeed */
     if(vt->state->mode.newline)
-      vterm_push_output_sprintf(vt, "\r\n");
+      fyvt_push_output_sprintf(vt, "\r\n");
     else
       goto case_LITERAL;
     break;
@@ -228,11 +228,11 @@ void vterm_keyboard_key(VTerm *vt, VTermKey key, VTermModifier mod)
   case KEYCODE_LITERAL: case_LITERAL:
     if(flags.disambiguate) {
       switch(key) {
-      case VTERM_KEY_TAB:
-      case VTERM_KEY_ENTER:
-      case VTERM_KEY_BACKSPACE:
+      case FYVT_KEY_TAB:
+      case FYVT_KEY_ENTER:
+      case FYVT_KEY_BACKSPACE:
         /* If there are no mods then leave these as-is */
-        flags.disambiguate = mod != VTERM_MOD_NONE;
+        flags.disambiguate = mod != FYVT_MOD_NONE;
         break;
       default:
         break;
@@ -240,30 +240,30 @@ void vterm_keyboard_key(VTerm *vt, VTermKey key, VTermModifier mod)
     }
 
     if(flags.disambiguate)
-      vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%d;%du", k.literal, mod+1);
+      fyvt_push_output_sprintf_ctrl(vt, C1_CSI, "%d;%du", k.literal, mod+1);
     else
-      vterm_push_output_sprintf(vt, mod & VTERM_MOD_ALT ? ESC_S "%c" : "%c", k.literal);
+      fyvt_push_output_sprintf(vt, mod & FYVT_MOD_ALT ? ESC_S "%c" : "%c", k.literal);
     break;
 
   case KEYCODE_SS3: case_SS3:
     if(mod == 0)
-      vterm_push_output_sprintf_ctrl(vt, C1_SS3, "%c", k.literal);
+      fyvt_push_output_sprintf_ctrl(vt, C1_SS3, "%c", k.literal);
     else
       goto case_CSI;
     break;
 
   case KEYCODE_CSI: case_CSI:
     if(mod == 0)
-      vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%c", k.literal);
+      fyvt_push_output_sprintf_ctrl(vt, C1_CSI, "%c", k.literal);
     else
-      vterm_push_output_sprintf_ctrl(vt, C1_CSI, "1;%d%c", mod + 1, k.literal);
+      fyvt_push_output_sprintf_ctrl(vt, C1_CSI, "1;%d%c", mod + 1, k.literal);
     break;
 
   case KEYCODE_CSINUM:
     if(mod == 0)
-      vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%d%c", k.csinum, k.literal);
+      fyvt_push_output_sprintf_ctrl(vt, C1_CSI, "%d%c", k.csinum, k.literal);
     else
-      vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%d;%d%c", k.csinum, mod + 1, k.literal);
+      fyvt_push_output_sprintf_ctrl(vt, C1_CSI, "%d;%d%c", k.csinum, mod + 1, k.literal);
     break;
 
   case KEYCODE_CSI_CURSOR:
@@ -282,14 +282,14 @@ void vterm_keyboard_key(VTerm *vt, VTermKey key, VTermModifier mod)
   }
 }
 
-void vterm_keyboard_start_paste(VTerm *vt)
+void fyvt_keyboard_start_paste(struct fyvt *vt)
 {
   if(vt->state->mode.bracketpaste)
-    vterm_push_output_sprintf_ctrl(vt, C1_CSI, "200~");
+    fyvt_push_output_sprintf_ctrl(vt, C1_CSI, "200~");
 }
 
-void vterm_keyboard_end_paste(VTerm *vt)
+void fyvt_keyboard_end_paste(struct fyvt *vt)
 {
   if(vt->state->mode.bracketpaste)
-    vterm_push_output_sprintf_ctrl(vt, C1_CSI, "201~");
+    fyvt_push_output_sprintf_ctrl(vt, C1_CSI, "201~");
 }

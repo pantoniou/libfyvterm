@@ -1,4 +1,4 @@
-#include "vterm_internal.h"
+#include "fyvt_internal.h"
 
 #define UNICODE_INVALID 0xFFFD
 
@@ -17,7 +17,7 @@ struct UTF8DecoderData {
   int this_cp;
 };
 
-static void init_utf8(VTermEncoding *enc UNUSED, void *data_)
+static void init_utf8(struct fyvt_encoding *enc UNUSED, void *data_)
 {
   struct UTF8DecoderData *data = data_;
 
@@ -25,7 +25,7 @@ static void init_utf8(VTermEncoding *enc UNUSED, void *data_)
   data->bytes_total     = 0;
 }
 
-static void decode_utf8(VTermEncoding *enc UNUSED, void *data_,
+static void decode_utf8(struct fyvt_encoding *enc UNUSED, void *data_,
                         uint32_t cp[], int *cpi, int cplen,
                         const char bytes[], size_t *pos, size_t bytelen)
 {
@@ -154,12 +154,12 @@ static void decode_utf8(VTermEncoding *enc UNUSED, void *data_,
   }
 }
 
-static VTermEncoding encoding_utf8 = {
+static struct fyvt_encoding encoding_utf8 = {
   .init   = &init_utf8,
   .decode = &decode_utf8,
 };
 
-static void decode_usascii(VTermEncoding *enc UNUSED, void *data UNUSED,
+static void decode_usascii(struct fyvt_encoding *enc UNUSED, void *data UNUSED,
                            uint32_t cp[], int *cpi, int cplen,
                            const char bytes[], size_t *pos, size_t bytelen)
 {
@@ -175,16 +175,16 @@ static void decode_usascii(VTermEncoding *enc UNUSED, void *data UNUSED,
   }
 }
 
-static VTermEncoding encoding_usascii = {
+static struct fyvt_encoding encoding_usascii = {
   .decode = &decode_usascii,
 };
 
 struct StaticTableEncoding {
-  const VTermEncoding enc;
+  const struct fyvt_encoding enc;
   const uint32_t chars[128];
 };
 
-static void decode_table(VTermEncoding *enc, void *data UNUSED,
+static void decode_table(struct fyvt_encoding *enc, void *data UNUSED,
                          uint32_t cp[], int *cpi, int cplen,
                          const char bytes[], size_t *pos, size_t bytelen)
 {
@@ -208,20 +208,20 @@ static void decode_table(VTermEncoding *enc, void *data UNUSED,
 #include "encoding/uk.inc"
 
 static struct {
-  VTermEncodingType type;
+  enum fyvt_encoding_type type;
   char designation;
-  VTermEncoding *enc;
+  struct fyvt_encoding *enc;
 }
 encodings[] = {
   { ENC_UTF8,      'u', &encoding_utf8 },
-  { ENC_SINGLE_94, '0', (VTermEncoding*)&encoding_DECdrawing },
-  { ENC_SINGLE_94, 'A', (VTermEncoding*)&encoding_uk },
+  { ENC_SINGLE_94, '0', (struct fyvt_encoding*)&encoding_DECdrawing },
+  { ENC_SINGLE_94, 'A', (struct fyvt_encoding*)&encoding_uk },
   { ENC_SINGLE_94, 'B', &encoding_usascii },
   { 0 },
 };
 
 /* This ought to be INTERNAL but isn't because it's used by unit testing */
-VTermEncoding *vterm_lookup_encoding(VTermEncodingType type, char designation)
+struct fyvt_encoding *fyvt_lookup_encoding(enum fyvt_encoding_type type, char designation)
 {
   for(int i = 0; encodings[i].designation; i++)
     if(encodings[i].type == type && encodings[i].designation == designation)

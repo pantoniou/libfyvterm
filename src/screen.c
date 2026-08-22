@@ -1,4 +1,4 @@
-#include "vterm_internal.h"
+#include "fyvt_internal.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -15,7 +15,7 @@
 typedef struct
 {
   /* After the bitfield */
-  VTermColor   fg, bg;
+  union fyvt_color   fg, bg;
 
   unsigned int bold      : 1;
   unsigned int underline : 2;
@@ -39,23 +39,23 @@ typedef struct
 /* Internal representation of a screen cell */
 typedef struct
 {
-  uint32_t chars[VTERM_MAX_CHARS_PER_CELL];
+  uint32_t chars[FYVT_MAX_CHARS_PER_CELL];
   ScreenPen pen;
 } ScreenCell;
 
-struct VTermScreen
+struct fyvt_screen
 {
-  VTerm *vt;
-  VTermState *state;
+  struct fyvt *vt;
+  struct fyvt_state *state;
 
-  const VTermScreenCallbacks *callbacks;
+  const struct fyvt_screen_callbacks *callbacks;
   void *cbdata;
   bool callbacks_has_pushline4;
 
-  VTermDamageSize damage_merge;
+  enum fyvt_damage_size damage_merge;
   /* start_row == -1 => no damage */
-  VTermRect damaged;
-  VTermRect pending_scrollrect;
+  struct fyvt_rect damaged;
+  struct fyvt_rect pending_scrollrect;
   int pending_scroll_downward, pending_scroll_rightward;
 
   int rows;
@@ -71,18 +71,18 @@ struct VTermScreen
   ScreenCell *buffer;
 
   /* buffer for a single screen row used in scrollback storage callbacks */
-  VTermScreenCell *sb_buffer;
+  struct fyvt_screen_cell *sb_buffer;
 
   ScreenPen pen;
 };
 
-static inline void clearcell(const VTermScreen *screen, ScreenCell *cell)
+static inline void clearcell(const struct fyvt_screen *screen, ScreenCell *cell)
 {
   cell->chars[0] = 0;
   cell->pen = screen->pen;
 }
 
-static inline ScreenCell *getcell(const VTermScreen *screen, int row, int col)
+static inline ScreenCell *getcell(const struct fyvt_screen *screen, int row, int col)
 {
   if(row < 0 || row >= screen->rows)
     return NULL;
@@ -91,9 +91,9 @@ static inline ScreenCell *getcell(const VTermScreen *screen, int row, int col)
   return screen->buffer + (screen->cols * row) + col;
 }
 
-static ScreenCell *alloc_buffer(VTermScreen *screen, int rows, int cols)
+static ScreenCell *alloc_buffer(struct fyvt_screen *screen, int rows, int cols)
 {
-  ScreenCell *new_buffer = vterm_allocator_malloc(screen->vt, sizeof(ScreenCell) * rows * cols);
+  ScreenCell *new_buffer = fyvt_allocator_malloc(screen->vt, sizeof(ScreenCell) * rows * cols);
 
   for(int row = 0; row < rows; row++) {
     for(int col = 0; col < cols; col++) {
@@ -104,22 +104,22 @@ static ScreenCell *alloc_buffer(VTermScreen *screen, int rows, int cols)
   return new_buffer;
 }
 
-static void damagerect(VTermScreen *screen, VTermRect rect)
+static void damagerect(struct fyvt_screen *screen, struct fyvt_rect rect)
 {
-  VTermRect emit;
+  struct fyvt_rect emit;
 
   switch(screen->damage_merge) {
-  case VTERM_DAMAGE_CELL:
+  case FYVT_DAMAGE_CELL:
     /* Always emit damage event */
     emit = rect;
     break;
 
-  case VTERM_DAMAGE_ROW:
+  case FYVT_DAMAGE_ROW:
     /* Emit damage longer than one row. Try to merge with existing damage in
      * the same row */
     if(rect.end_row > rect.start_row + 1) {
       // Bigger than 1 line - flush existing, emit this
-      vterm_screen_flush_damage(screen);
+      fyvt_screen_flush_damage(screen);
       emit = rect;
     }
     else if(screen->damaged.start_row == -1) {
@@ -142,8 +142,8 @@ static void damagerect(VTermScreen *screen, VTermRect rect)
     }
     break;
 
-  case VTERM_DAMAGE_SCREEN:
-  case VTERM_DAMAGE_SCROLL:
+  case FYVT_DAMAGE_SCREEN:
+  case FYVT_DAMAGE_SCROLL:
     /* Never emit damage event */
     if(screen->damaged.start_row == -1)
       screen->damaged = rect;
@@ -161,9 +161,9 @@ static void damagerect(VTermScreen *screen, VTermRect rect)
     (*screen->callbacks->damage)(emit, screen->cbdata);
 }
 
-static void damagescreen(VTermScreen *screen)
+static void damagescreen(struct fyvt_screen *screen)
 {
-  VTermRect rect = {
+  struct fyvt_rect rect = {
     .start_row = 0,
     .end_row   = screen->rows,
     .start_col = 0,
@@ -173,26 +173,26 @@ static void damagescreen(VTermScreen *screen)
   damagerect(screen, rect);
 }
 
-static int putglyph(VTermGlyphInfo *info, VTermPos pos, void *user)
+static int putglyph(struct fyvt_glyph_info *info, struct fyvt_pos pos, void *user)
 {
-  VTermScreen *screen = user;
+  struct fyvt_screen *screen = user;
   ScreenCell *cell = getcell(screen, pos.row, pos.col);
 
   if(!cell)
     return 0;
 
   int i;
-  for(i = 0; i < VTERM_MAX_CHARS_PER_CELL && info->chars[i]; i++) {
+  for(i = 0; i < FYVT_MAX_CHARS_PER_CELL && info->chars[i]; i++) {
     cell->chars[i] = info->chars[i];
     cell->pen = screen->pen;
   }
-  if(i < VTERM_MAX_CHARS_PER_CELL)
+  if(i < FYVT_MAX_CHARS_PER_CELL)
     cell->chars[i] = 0;
 
   for(int col = 1; col < info->width; col++)
     getcell(screen, pos.row, pos.col + col)->chars[0] = (uint32_t)-1;
 
-  VTermRect rect = {
+  struct fyvt_rect rect = {
     .start_row = pos.row,
     .end_row   = pos.row+1,
     .start_col = pos.col,
@@ -208,11 +208,11 @@ static int putglyph(VTermGlyphInfo *info, VTermPos pos, void *user)
   return 1;
 }
 
-static void sb_pushline_from_row(VTermScreen *screen, int row, bool continuation)
+static void sb_pushline_from_row(struct fyvt_screen *screen, int row, bool continuation)
 {
-  VTermPos pos = { .row = row };
+  struct fyvt_pos pos = { .row = row };
   for(pos.col = 0; pos.col < screen->cols; pos.col++)
-    vterm_screen_get_cell(screen, pos, screen->sb_buffer + pos.col);
+    fyvt_screen_get_cell(screen, pos, screen->sb_buffer + pos.col);
 
   if(screen->callbacks_has_pushline4 && screen->callbacks->sb_pushline4)
     (screen->callbacks->sb_pushline4)(screen->cols, screen->sb_buffer, continuation, screen->cbdata);
@@ -220,9 +220,9 @@ static void sb_pushline_from_row(VTermScreen *screen, int row, bool continuation
     (screen->callbacks->sb_pushline)(screen->cols, screen->sb_buffer, screen->cbdata);
 }
 
-static int premove(VTermRect rect, void *user)
+static int premove(struct fyvt_rect rect, void *user)
 {
-  VTermScreen *screen = user;
+  struct fyvt_screen *screen = user;
 
   if(((screen->callbacks && screen->callbacks->sb_pushline) ||
         (screen->callbacks_has_pushline4 && screen->callbacks && screen->callbacks->sb_pushline4)) &&
@@ -230,7 +230,7 @@ static int premove(VTermRect rect, void *user)
      rect.end_col == screen->cols &&                      // full width
      screen->buffer == screen->buffers[BUFIDX_PRIMARY]) { // not altscreen
     for(int row = 0; row < rect.end_row; row++) {
-      const VTermLineInfo *lineinfo = vterm_state_get_lineinfo(screen->state, row);
+      const struct fyvt_line_info *lineinfo = fyvt_state_get_lineinfo(screen->state, row);
       sb_pushline_from_row(screen, row, lineinfo->continuation);
     }
   }
@@ -238,9 +238,9 @@ static int premove(VTermRect rect, void *user)
   return 1;
 }
 
-static int moverect_internal(VTermRect dest, VTermRect src, void *user)
+static int moverect_internal(struct fyvt_rect dest, struct fyvt_rect src, void *user)
 {
-  VTermScreen *screen = user;
+  struct fyvt_screen *screen = user;
 
   int cols = src.end_col - src.start_col;
   int downward = src.start_row - dest.start_row;
@@ -265,14 +265,14 @@ static int moverect_internal(VTermRect dest, VTermRect src, void *user)
   return 1;
 }
 
-static int moverect_user(VTermRect dest, VTermRect src, void *user)
+static int moverect_user(struct fyvt_rect dest, struct fyvt_rect src, void *user)
 {
-  VTermScreen *screen = user;
+  struct fyvt_screen *screen = user;
 
   if(screen->callbacks && screen->callbacks->moverect) {
-    if(screen->damage_merge != VTERM_DAMAGE_SCROLL)
+    if(screen->damage_merge != FYVT_DAMAGE_SCROLL)
       // Avoid an infinite loop
-      vterm_screen_flush_damage(screen);
+      fyvt_screen_flush_damage(screen);
 
     if((*screen->callbacks->moverect)(dest, src, screen->cbdata))
       return 1;
@@ -283,12 +283,12 @@ static int moverect_user(VTermRect dest, VTermRect src, void *user)
   return 1;
 }
 
-static int erase_internal(VTermRect rect, int selective, void *user)
+static int erase_internal(struct fyvt_rect rect, int selective, void *user)
 {
-  VTermScreen *screen = user;
+  struct fyvt_screen *screen = user;
 
   for(int row = rect.start_row; row < screen->state->rows && row < rect.end_row; row++) {
-    const VTermLineInfo *info = vterm_state_get_lineinfo(screen->state, row);
+    const struct fyvt_line_info *info = fyvt_state_get_lineinfo(screen->state, row);
 
     for(int col = rect.start_col; col < rect.end_col; col++) {
       ScreenCell *cell = getcell(screen, row, col);
@@ -310,32 +310,32 @@ static int erase_internal(VTermRect rect, int selective, void *user)
   return 1;
 }
 
-static int erase_user(VTermRect rect, int selective UNUSED, void *user)
+static int erase_user(struct fyvt_rect rect, int selective UNUSED, void *user)
 {
-  VTermScreen *screen = user;
+  struct fyvt_screen *screen = user;
 
   damagerect(screen, rect);
 
   return 1;
 }
 
-static int erase(VTermRect rect, int selective, void *user)
+static int erase(struct fyvt_rect rect, int selective, void *user)
 {
   erase_internal(rect, selective, user);
   return erase_user(rect, 0, user);
 }
 
-static int scrollrect(VTermRect rect, int downward, int rightward, void *user)
+static int scrollrect(struct fyvt_rect rect, int downward, int rightward, void *user)
 {
-  VTermScreen *screen = user;
+  struct fyvt_screen *screen = user;
 
-  if(screen->damage_merge != VTERM_DAMAGE_SCROLL) {
-    vterm_scroll_rect(rect, downward, rightward,
+  if(screen->damage_merge != FYVT_DAMAGE_SCROLL) {
+    fyvt_scroll_rect(rect, downward, rightward,
         moverect_internal, erase_internal, screen);
 
-    vterm_screen_flush_damage(screen);
+    fyvt_screen_flush_damage(screen);
 
-    vterm_scroll_rect(rect, downward, rightward,
+    fyvt_scroll_rect(rect, downward, rightward,
         moverect_user, erase_user, screen);
 
     return 1;
@@ -343,7 +343,7 @@ static int scrollrect(VTermRect rect, int downward, int rightward, void *user)
 
   if(screen->damaged.start_row != -1 &&
      !rect_intersects(&rect, &screen->damaged)) {
-    vterm_screen_flush_damage(screen);
+    fyvt_screen_flush_damage(screen);
   }
 
   if(screen->pending_scrollrect.start_row == -1) {
@@ -358,14 +358,14 @@ static int scrollrect(VTermRect rect, int downward, int rightward, void *user)
     screen->pending_scroll_rightward += rightward;
   }
   else {
-    vterm_screen_flush_damage(screen);
+    fyvt_screen_flush_damage(screen);
 
     screen->pending_scrollrect = rect;
     screen->pending_scroll_downward  = downward;
     screen->pending_scroll_rightward = rightward;
   }
 
-  vterm_scroll_rect(rect, downward, rightward,
+  fyvt_scroll_rect(rect, downward, rightward,
       moverect_internal, erase_internal, screen);
 
   if(screen->damaged.start_row == -1)
@@ -373,7 +373,7 @@ static int scrollrect(VTermRect rect, int downward, int rightward, void *user)
 
   if(rect_contains(&rect, &screen->damaged)) {
     /* Scroll region entirely contains the damage; just move it */
-    vterm_rect_move(&screen->damaged, -downward, -rightward);
+    fyvt_rect_move(&screen->damaged, -downward, -rightward);
     rect_clip(&screen->damaged, &rect);
   }
   /* There are a number of possible cases here, but lets restrict this to only
@@ -409,9 +409,9 @@ static int scrollrect(VTermRect rect, int downward, int rightward, void *user)
   return 1;
 }
 
-static int movecursor(VTermPos pos, VTermPos oldpos, int visible, void *user)
+static int movecursor(struct fyvt_pos pos, struct fyvt_pos oldpos, int visible, void *user)
 {
-  VTermScreen *screen = user;
+  struct fyvt_screen *screen = user;
 
   if(screen->callbacks && screen->callbacks->movecursor)
     return (*screen->callbacks->movecursor)(pos, oldpos, visible, screen->cbdata);
@@ -419,67 +419,67 @@ static int movecursor(VTermPos pos, VTermPos oldpos, int visible, void *user)
   return 0;
 }
 
-static int setpenattr(VTermAttr attr, VTermValue *val, void *user)
+static int setpenattr(enum fyvt_attr attr, union fyvt_value *val, void *user)
 {
-  VTermScreen *screen = user;
+  struct fyvt_screen *screen = user;
 
   switch(attr) {
-  case VTERM_ATTR_BOLD:
+  case FYVT_ATTR_BOLD:
     screen->pen.bold = val->boolean;
     return 1;
-  case VTERM_ATTR_UNDERLINE:
+  case FYVT_ATTR_UNDERLINE:
     screen->pen.underline = val->number;
     return 1;
-  case VTERM_ATTR_ITALIC:
+  case FYVT_ATTR_ITALIC:
     screen->pen.italic = val->boolean;
     return 1;
-  case VTERM_ATTR_BLINK:
+  case FYVT_ATTR_BLINK:
     screen->pen.blink = val->boolean;
     return 1;
-  case VTERM_ATTR_REVERSE:
+  case FYVT_ATTR_REVERSE:
     screen->pen.reverse = val->boolean;
     return 1;
-  case VTERM_ATTR_CONCEAL:
+  case FYVT_ATTR_CONCEAL:
     screen->pen.conceal = val->boolean;
     return 1;
-  case VTERM_ATTR_STRIKE:
+  case FYVT_ATTR_STRIKE:
     screen->pen.strike = val->boolean;
     return 1;
-  case VTERM_ATTR_FONT:
+  case FYVT_ATTR_FONT:
     screen->pen.font = val->number;
     return 1;
-  case VTERM_ATTR_FOREGROUND:
+  case FYVT_ATTR_FOREGROUND:
     screen->pen.fg = val->color;
     return 1;
-  case VTERM_ATTR_BACKGROUND:
+  case FYVT_ATTR_BACKGROUND:
     screen->pen.bg = val->color;
     return 1;
-  case VTERM_ATTR_SMALL:
+  case FYVT_ATTR_SMALL:
     screen->pen.small = val->boolean;
     return 1;
-  case VTERM_ATTR_BASELINE:
+  case FYVT_ATTR_BASELINE:
     screen->pen.baseline = val->number;
     return 1;
-  case VTERM_ATTR_DIM:
+  case FYVT_ATTR_DIM:
     screen->pen.dim = val->boolean;
     return 1;
-  case VTERM_ATTR_OVERLINE:
+  case FYVT_ATTR_OVERLINE:
     screen->pen.overline = val->boolean;
     return 1;
 
-  case VTERM_N_ATTRS:
+  case FYVT_N_ATTRS:
     return 0;
   }
 
   return 0;
 }
 
-static int settermprop(VTermProp prop, VTermValue *val, void *user)
+static int settermprop(enum fyvt_prop prop, union fyvt_value *val, void *user)
 {
-  VTermScreen *screen = user;
+  struct fyvt_screen *screen = user;
 
   switch(prop) {
-  case VTERM_PROP_ALTSCREEN:
+  case FYVT_PROP_ALTSCREEN:
     if(val->boolean && !screen->buffers[BUFIDX_ALTSCREEN])
       return 0;
 
@@ -490,7 +490,7 @@ static int settermprop(VTermProp prop, VTermValue *val, void *user)
     if(!val->boolean)
       damagescreen(screen);
     break;
-  case VTERM_PROP_REVERSE:
+  case FYVT_PROP_REVERSE:
     screen->global_reverse = val->boolean;
     damagescreen(screen);
     break;
@@ -506,7 +506,7 @@ static int settermprop(VTermProp prop, VTermValue *val, void *user)
 
 static int bell(void *user)
 {
-  VTermScreen *screen = user;
+  struct fyvt_screen *screen = user;
 
   if(screen->callbacks && screen->callbacks->bell)
     return (*screen->callbacks->bell)(screen->cbdata);
@@ -524,22 +524,22 @@ static int line_popcount(ScreenCell *buffer, int row, int rows UNUSED, int cols)
   return col + 1;
 }
 
-static void resize_buffer(VTermScreen *screen, int bufidx, int new_rows, int new_cols, bool active, VTermStateFields *statefields)
+static void resize_buffer(struct fyvt_screen *screen, int bufidx, int new_rows, int new_cols, bool active, struct fyvt_state_fields *statefields)
 {
   int old_rows = screen->rows;
   int old_cols = screen->cols;
 
   ScreenCell *old_buffer = screen->buffers[bufidx];
-  VTermLineInfo *old_lineinfo = statefields->lineinfos[bufidx];
+  struct fyvt_line_info *old_lineinfo = statefields->lineinfos[bufidx];
 
-  ScreenCell *new_buffer = vterm_allocator_malloc(screen->vt, sizeof(ScreenCell) * new_rows * new_cols);
-  VTermLineInfo *new_lineinfo = vterm_allocator_malloc(screen->vt, sizeof(new_lineinfo[0]) * new_rows);
+  ScreenCell *new_buffer = fyvt_allocator_malloc(screen->vt, sizeof(ScreenCell) * new_rows * new_cols);
+  struct fyvt_line_info *new_lineinfo = fyvt_allocator_malloc(screen->vt, sizeof(new_lineinfo[0]) * new_rows);
 
   int old_row = old_rows - 1;
   int new_row = new_rows - 1;
 
-  VTermPos old_cursor = statefields->pos;
-  VTermPos new_cursor = { -1, -1 };
+  struct fyvt_pos old_cursor = statefields->pos;
+  struct fyvt_pos new_cursor = { -1, -1 };
 
 #ifdef DEBUG_REFLOW
   fprintf(stderr, "Resizing from %dx%d to %dx%d; cursor was at (%d,%d)\n",
@@ -700,7 +700,7 @@ static void resize_buffer(VTermScreen *screen, int bufidx, int new_rows, int new
     if((screen->callbacks && screen->callbacks->sb_pushline) ||
           (screen->callbacks_has_pushline4 && screen->callbacks && screen->callbacks->sb_pushline4))
       for(int row = 0; row <= old_row; row++) {
-        const VTermLineInfo *lineinfo = old_lineinfo + row;
+        const struct fyvt_line_info *lineinfo = old_lineinfo + row;
         sb_pushline_from_row(screen, row, lineinfo->continuation);
       }
     if(active)
@@ -713,12 +713,12 @@ static void resize_buffer(VTermScreen *screen, int bufidx, int new_rows, int new
       if(!(screen->callbacks->sb_popline(old_cols, screen->sb_buffer, screen->cbdata)))
         break;
 
-      VTermPos pos = { .row = new_row };
+      struct fyvt_pos pos = { .row = new_row };
       for(pos.col = 0; pos.col < old_cols && pos.col < new_cols; pos.col += screen->sb_buffer[pos.col].width) {
-        VTermScreenCell *src = &screen->sb_buffer[pos.col];
+        struct fyvt_screen_cell *src = &screen->sb_buffer[pos.col];
         ScreenCell *dst = &new_buffer[pos.row * new_cols + pos.col];
 
-        for(int i = 0; i < VTERM_MAX_CHARS_PER_CELL; i++) {
+        for(int i = 0; i < FYVT_MAX_CHARS_PER_CELL; i++) {
           dst->chars[i] = src->chars[i];
           if(!src->chars[i])
             break;
@@ -762,14 +762,14 @@ static void resize_buffer(VTermScreen *screen, int bufidx, int new_rows, int new
     for(new_row = moverows; new_row < new_rows; new_row++) {
       for(int col = 0; col < new_cols; col++)
         clearcell(screen, &new_buffer[new_row * new_cols + col]);
-      new_lineinfo[new_row] = (VTermLineInfo){ 0 };
+      new_lineinfo[new_row] = (struct fyvt_line_info){ 0 };
     }
   }
 
-  vterm_allocator_free(screen->vt, old_buffer);
+  fyvt_allocator_free(screen->vt, old_buffer);
   screen->buffers[bufidx] = new_buffer;
 
-  vterm_allocator_free(screen->vt, old_lineinfo);
+  fyvt_allocator_free(screen->vt, old_lineinfo);
   statefields->lineinfos[bufidx] = new_lineinfo;
 
   if(active)
@@ -778,9 +778,9 @@ static void resize_buffer(VTermScreen *screen, int bufidx, int new_rows, int new
   return;
 }
 
-static int resize(int new_rows, int new_cols, VTermStateFields *fields, void *user)
+static int resize(int new_rows, int new_cols, struct fyvt_state_fields *fields, void *user)
 {
-  VTermScreen *screen = user;
+  struct fyvt_screen *screen = user;
 
   int altscreen_active = (screen->buffers[BUFIDX_ALTSCREEN] && screen->buffer == screen->buffers[BUFIDX_ALTSCREEN]);
 
@@ -790,9 +790,9 @@ static int resize(int new_rows, int new_cols, VTermStateFields *fields, void *us
   if(new_cols > old_cols) {
     /* Ensure that ->sb_buffer is large enough for a new or and old row */
     if(screen->sb_buffer)
-      vterm_allocator_free(screen->vt, screen->sb_buffer);
+      fyvt_allocator_free(screen->vt, screen->sb_buffer);
 
-    screen->sb_buffer = vterm_allocator_malloc(screen->vt, sizeof(VTermScreenCell) * new_cols);
+    screen->sb_buffer = fyvt_allocator_malloc(screen->vt, sizeof(struct fyvt_screen_cell) * new_cols);
   }
 
   resize_buffer(screen, 0, new_rows, new_cols, !altscreen_active, fields);
@@ -801,11 +801,11 @@ static int resize(int new_rows, int new_cols, VTermStateFields *fields, void *us
   else if(new_rows != old_rows) {
     /* We don't need a full resize of the altscreen because it isn't enabled
      * but we should at least keep the lineinfo the right size */
-    vterm_allocator_free(screen->vt, fields->lineinfos[BUFIDX_ALTSCREEN]);
+    fyvt_allocator_free(screen->vt, fields->lineinfos[BUFIDX_ALTSCREEN]);
 
-    VTermLineInfo *new_lineinfo = vterm_allocator_malloc(screen->vt, sizeof(new_lineinfo[0]) * new_rows);
+    struct fyvt_line_info *new_lineinfo = fyvt_allocator_malloc(screen->vt, sizeof(new_lineinfo[0]) * new_rows);
     for(int row = 0; row < new_rows; row++)
-      new_lineinfo[row] = (VTermLineInfo){ 0 };
+      new_lineinfo[row] = (struct fyvt_line_info){ 0 };
 
     fields->lineinfos[BUFIDX_ALTSCREEN] = new_lineinfo;
   }
@@ -817,9 +817,9 @@ static int resize(int new_rows, int new_cols, VTermStateFields *fields, void *us
 
   if(new_cols <= old_cols) {
     if(screen->sb_buffer)
-      vterm_allocator_free(screen->vt, screen->sb_buffer);
+      fyvt_allocator_free(screen->vt, screen->sb_buffer);
 
-    screen->sb_buffer = vterm_allocator_malloc(screen->vt, sizeof(VTermScreenCell) * new_cols);
+    screen->sb_buffer = fyvt_allocator_malloc(screen->vt, sizeof(struct fyvt_screen_cell) * new_cols);
   }
 
   /* TODO: Maaaaybe we can optimise this if there's no reflow happening */
@@ -831,9 +831,9 @@ static int resize(int new_rows, int new_cols, VTermStateFields *fields, void *us
   return 1;
 }
 
-static int setlineinfo(int row, const VTermLineInfo *newinfo, const VTermLineInfo *oldinfo, void *user)
+static int setlineinfo(int row, const struct fyvt_line_info *newinfo, const struct fyvt_line_info *oldinfo, void *user)
 {
-  VTermScreen *screen = user;
+  struct fyvt_screen *screen = user;
 
   if(newinfo->doublewidth != oldinfo->doublewidth ||
      newinfo->doubleheight != oldinfo->doubleheight) {
@@ -843,7 +843,7 @@ static int setlineinfo(int row, const VTermLineInfo *newinfo, const VTermLineInf
       cell->pen.dhl = newinfo->doubleheight;
     }
 
-    VTermRect rect = {
+    struct fyvt_rect rect = {
       .start_row = row,
       .end_row   = row + 1,
       .start_col = 0,
@@ -868,7 +868,7 @@ static int setlineinfo(int row, const VTermLineInfo *newinfo, const VTermLineInf
  * callbacks. */
 static int theme(bool *dark, void *user)
 {
-  VTermScreen *screen = user;
+  struct fyvt_screen *screen = user;
 
   if(screen->callbacks && screen->callbacks->theme)
     return (*screen->callbacks->theme)(dark, screen->cbdata);
@@ -877,7 +877,7 @@ static int theme(bool *dark, void *user)
 }
 
 static int sb_clear(void *user) {
-  VTermScreen *screen = user;
+  struct fyvt_screen *screen = user;
 
   if(screen->callbacks && screen->callbacks->sb_clear)
     if((*screen->callbacks->sb_clear)(screen->cbdata))
@@ -886,7 +886,7 @@ static int sb_clear(void *user) {
   return 0;
 }
 
-static VTermStateCallbacks state_cbs = {
+static struct fyvt_state_callbacks state_cbs = {
   .putglyph    = &putglyph,
   .movecursor  = &movecursor,
   .premove     = &premove,
@@ -901,21 +901,21 @@ static VTermStateCallbacks state_cbs = {
   .sb_clear    = &sb_clear,
 };
 
-static VTermScreen *screen_new(VTerm *vt)
+static struct fyvt_screen *screen_new(struct fyvt *vt)
 {
-  VTermState *state = vterm_obtain_state(vt);
+  struct fyvt_state *state = fyvt_obtain_state(vt);
   if(!state)
     return NULL;
 
-  VTermScreen *screen = vterm_allocator_malloc(vt, sizeof(VTermScreen));
+  struct fyvt_screen *screen = fyvt_allocator_malloc(vt, sizeof(struct fyvt_screen));
   int rows, cols;
 
-  vterm_get_size(vt, &rows, &cols);
+  fyvt_get_size(vt, &rows, &cols);
 
   screen->vt = vt;
   screen->state = state;
 
-  screen->damage_merge = VTERM_DAMAGE_CELL;
+  screen->damage_merge = FYVT_DAMAGE_CELL;
   screen->damaged.start_row = -1;
   screen->pending_scrollrect.start_row = -1;
 
@@ -933,34 +933,34 @@ static VTermScreen *screen_new(VTerm *vt)
 
   screen->buffer = screen->buffers[BUFIDX_PRIMARY];
 
-  screen->sb_buffer = vterm_allocator_malloc(screen->vt, sizeof(VTermScreenCell) * cols);
+  screen->sb_buffer = fyvt_allocator_malloc(screen->vt, sizeof(struct fyvt_screen_cell) * cols);
 
-  vterm_state_set_callbacks(screen->state, &state_cbs, screen);
-  vterm_state_callbacks_has_premove(screen->state);
+  fyvt_state_set_callbacks(screen->state, &state_cbs, screen);
+  fyvt_state_callbacks_has_premove(screen->state);
 
   return screen;
 }
 
-INTERNAL void vterm_screen_free(VTermScreen *screen)
+INTERNAL void fyvt_screen_free(struct fyvt_screen *screen)
 {
-  vterm_allocator_free(screen->vt, screen->buffers[BUFIDX_PRIMARY]);
+  fyvt_allocator_free(screen->vt, screen->buffers[BUFIDX_PRIMARY]);
   if(screen->buffers[BUFIDX_ALTSCREEN])
-    vterm_allocator_free(screen->vt, screen->buffers[BUFIDX_ALTSCREEN]);
+    fyvt_allocator_free(screen->vt, screen->buffers[BUFIDX_ALTSCREEN]);
 
-  vterm_allocator_free(screen->vt, screen->sb_buffer);
+  fyvt_allocator_free(screen->vt, screen->sb_buffer);
 
-  vterm_allocator_free(screen->vt, screen);
+  fyvt_allocator_free(screen->vt, screen);
 }
 
-void vterm_screen_reset(VTermScreen *screen, int hard)
+void fyvt_screen_reset(struct fyvt_screen *screen, int hard)
 {
   screen->damaged.start_row = -1;
   screen->pending_scrollrect.start_row = -1;
-  vterm_state_reset(screen->state, hard);
-  vterm_screen_flush_damage(screen);
+  fyvt_state_reset(screen->state, hard);
+  fyvt_screen_flush_damage(screen);
 }
 
-static size_t _get_chars(const VTermScreen *screen, const int utf8, void *buffer, size_t len, const VTermRect rect)
+static size_t _get_chars(const struct fyvt_screen *screen, const int utf8, void *buffer, size_t len, const struct fyvt_rect rect)
 {
   size_t outpos = 0;
   int padding = 0;
@@ -995,7 +995,7 @@ static size_t _get_chars(const VTermScreen *screen, const int utf8, void *buffer
           PUT(UNICODE_SPACE);
           padding--;
         }
-        for(int i = 0; i < VTERM_MAX_CHARS_PER_CELL && cell->chars[i]; i++) {
+        for(int i = 0; i < FYVT_MAX_CHARS_PER_CELL && cell->chars[i]; i++) {
           PUT(cell->chars[i]);
         }
       }
@@ -1010,24 +1010,24 @@ static size_t _get_chars(const VTermScreen *screen, const int utf8, void *buffer
   return outpos;
 }
 
-size_t vterm_screen_get_chars(const VTermScreen *screen, uint32_t *chars, size_t len, const VTermRect rect)
+size_t fyvt_screen_get_chars(const struct fyvt_screen *screen, uint32_t *chars, size_t len, const struct fyvt_rect rect)
 {
   return _get_chars(screen, 0, chars, len, rect);
 }
 
-size_t vterm_screen_get_text(const VTermScreen *screen, char *str, size_t len, const VTermRect rect)
+size_t fyvt_screen_get_text(const struct fyvt_screen *screen, char *str, size_t len, const struct fyvt_rect rect)
 {
   return _get_chars(screen, 1, str, len, rect);
 }
 
 /* Copy internal to external representation of a screen cell */
-int vterm_screen_get_cell(const VTermScreen *screen, VTermPos pos, VTermScreenCell *cell)
+int fyvt_screen_get_cell(const struct fyvt_screen *screen, struct fyvt_pos pos, struct fyvt_screen_cell *cell)
 {
   ScreenCell *intcell = getcell(screen, pos.row, pos.col);
   if(!intcell)
     return 0;
 
-  for(int i = 0; i < VTERM_MAX_CHARS_PER_CELL; i++) {
+  for(int i = 0; i < FYVT_MAX_CHARS_PER_CELL; i++) {
     cell->chars[i] = intcell->chars[i];
     if(!intcell->chars[i])
       break;
@@ -1067,7 +1067,7 @@ int vterm_screen_get_cell(const VTermScreen *screen, VTermPos pos, VTermScreenCe
   return 1;
 }
 
-int vterm_screen_is_eol(const VTermScreen *screen, VTermPos pos)
+int fyvt_screen_is_eol(const struct fyvt_screen *screen, struct fyvt_pos pos)
 {
   /* This cell is EOL if this and every cell to the right is black */
   for(; pos.col < screen->cols; pos.col++) {
@@ -1079,68 +1079,68 @@ int vterm_screen_is_eol(const VTermScreen *screen, VTermPos pos)
   return 1;
 }
 
-VTermScreen *vterm_obtain_screen(VTerm *vt)
+struct fyvt_screen *fyvt_obtain_screen(struct fyvt *vt)
 {
   if(vt->screen)
     return vt->screen;
 
-  VTermScreen *screen = screen_new(vt);
+  struct fyvt_screen *screen = screen_new(vt);
   vt->screen = screen;
 
   return screen;
 }
 
-void vterm_screen_enable_reflow(VTermScreen *screen, bool reflow)
+void fyvt_screen_enable_reflow(struct fyvt_screen *screen, bool reflow)
 {
   screen->reflow = reflow;
 }
 
-#undef vterm_screen_set_reflow
-void vterm_screen_set_reflow(VTermScreen *screen, bool reflow)
+#undef fyvt_screen_set_reflow
+void fyvt_screen_set_reflow(struct fyvt_screen *screen, bool reflow)
 {
-  vterm_screen_enable_reflow(screen, reflow);
+  fyvt_screen_enable_reflow(screen, reflow);
 }
 
-void vterm_screen_enable_altscreen(VTermScreen *screen, int altscreen)
+void fyvt_screen_enable_altscreen(struct fyvt_screen *screen, int altscreen)
 {
   if(!screen->buffers[BUFIDX_ALTSCREEN] && altscreen) {
     int rows, cols;
-    vterm_get_size(screen->vt, &rows, &cols);
+    fyvt_get_size(screen->vt, &rows, &cols);
 
     screen->buffers[BUFIDX_ALTSCREEN] = alloc_buffer(screen, rows, cols);
   }
 }
 
-void vterm_screen_set_callbacks(VTermScreen *screen, const VTermScreenCallbacks *callbacks, void *user)
+void fyvt_screen_set_callbacks(struct fyvt_screen *screen, const struct fyvt_screen_callbacks *callbacks, void *user)
 {
   screen->callbacks = callbacks;
   screen->cbdata = user;
 }
 
-void *vterm_screen_get_cbdata(VTermScreen *screen)
+void *fyvt_screen_get_cbdata(struct fyvt_screen *screen)
 {
   return screen->cbdata;
 }
 
-void vterm_screen_callbacks_has_pushline4(VTermScreen *screen)
+void fyvt_screen_callbacks_has_pushline4(struct fyvt_screen *screen)
 {
   screen->callbacks_has_pushline4 = true;
 }
 
-void vterm_screen_set_unrecognised_fallbacks(VTermScreen *screen, const VTermStateFallbacks *fallbacks, void *user)
+void fyvt_screen_set_unrecognised_fallbacks(struct fyvt_screen *screen, const struct fyvt_state_fallbacks *fallbacks, void *user)
 {
-  vterm_state_set_unrecognised_fallbacks(screen->state, fallbacks, user);
+  fyvt_state_set_unrecognised_fallbacks(screen->state, fallbacks, user);
 }
 
-void *vterm_screen_get_unrecognised_fbdata(VTermScreen *screen)
+void *fyvt_screen_get_unrecognised_fbdata(struct fyvt_screen *screen)
 {
-  return vterm_state_get_unrecognised_fbdata(screen->state);
+  return fyvt_state_get_unrecognised_fbdata(screen->state);
 }
 
-void vterm_screen_flush_damage(VTermScreen *screen)
+void fyvt_screen_flush_damage(struct fyvt_screen *screen)
 {
   if(screen->pending_scrollrect.start_row != -1) {
-    vterm_scroll_rect(screen->pending_scrollrect, screen->pending_scroll_downward, screen->pending_scroll_rightward,
+    fyvt_scroll_rect(screen->pending_scrollrect, screen->pending_scroll_downward, screen->pending_scroll_rightward,
         moverect_user, erase_user, screen);
 
     screen->pending_scrollrect.start_row = -1;
@@ -1154,43 +1154,43 @@ void vterm_screen_flush_damage(VTermScreen *screen)
   }
 }
 
-void vterm_screen_set_damage_merge(VTermScreen *screen, VTermDamageSize size)
+void fyvt_screen_set_damage_merge(struct fyvt_screen *screen, enum fyvt_damage_size size)
 {
-  vterm_screen_flush_damage(screen);
+  fyvt_screen_flush_damage(screen);
   screen->damage_merge = size;
 }
 
-static int attrs_differ(VTermAttrMask attrs, ScreenCell *a, ScreenCell *b)
+static int attrs_differ(enum fyvt_attr_mask attrs, ScreenCell *a, ScreenCell *b)
 {
-  if((attrs & VTERM_ATTR_BOLD_MASK)       && (a->pen.bold != b->pen.bold))
+  if((attrs & FYVT_ATTR_BOLD_MASK)       && (a->pen.bold != b->pen.bold))
     return 1;
-  if((attrs & VTERM_ATTR_UNDERLINE_MASK)  && (a->pen.underline != b->pen.underline))
+  if((attrs & FYVT_ATTR_UNDERLINE_MASK)  && (a->pen.underline != b->pen.underline))
     return 1;
-  if((attrs & VTERM_ATTR_ITALIC_MASK)     && (a->pen.italic != b->pen.italic))
+  if((attrs & FYVT_ATTR_ITALIC_MASK)     && (a->pen.italic != b->pen.italic))
     return 1;
-  if((attrs & VTERM_ATTR_BLINK_MASK)      && (a->pen.blink != b->pen.blink))
+  if((attrs & FYVT_ATTR_BLINK_MASK)      && (a->pen.blink != b->pen.blink))
     return 1;
-  if((attrs & VTERM_ATTR_REVERSE_MASK)    && (a->pen.reverse != b->pen.reverse))
+  if((attrs & FYVT_ATTR_REVERSE_MASK)    && (a->pen.reverse != b->pen.reverse))
     return 1;
-  if((attrs & VTERM_ATTR_CONCEAL_MASK)    && (a->pen.conceal != b->pen.conceal))
+  if((attrs & FYVT_ATTR_CONCEAL_MASK)    && (a->pen.conceal != b->pen.conceal))
     return 1;
-  if((attrs & VTERM_ATTR_STRIKE_MASK)     && (a->pen.strike != b->pen.strike))
+  if((attrs & FYVT_ATTR_STRIKE_MASK)     && (a->pen.strike != b->pen.strike))
     return 1;
-  if((attrs & VTERM_ATTR_FONT_MASK)       && (a->pen.font != b->pen.font))
+  if((attrs & FYVT_ATTR_FONT_MASK)       && (a->pen.font != b->pen.font))
     return 1;
-  if((attrs & VTERM_ATTR_FOREGROUND_MASK) && !vterm_color_is_equal(&a->pen.fg, &b->pen.fg))
+  if((attrs & FYVT_ATTR_FOREGROUND_MASK) && !fyvt_color_is_equal(&a->pen.fg, &b->pen.fg))
     return 1;
-  if((attrs & VTERM_ATTR_BACKGROUND_MASK) && !vterm_color_is_equal(&a->pen.bg, &b->pen.bg))
+  if((attrs & FYVT_ATTR_BACKGROUND_MASK) && !fyvt_color_is_equal(&a->pen.bg, &b->pen.bg))
     return 1;
-  if((attrs & VTERM_ATTR_SMALL_MASK)    && (a->pen.small != b->pen.small))
+  if((attrs & FYVT_ATTR_SMALL_MASK)    && (a->pen.small != b->pen.small))
     return 1;
-  if((attrs & VTERM_ATTR_BASELINE_MASK)    && (a->pen.baseline != b->pen.baseline))
+  if((attrs & FYVT_ATTR_BASELINE_MASK)    && (a->pen.baseline != b->pen.baseline))
     return 1;
 
   return 0;
 }
 
-int vterm_screen_get_attrs_extent(const VTermScreen *screen, VTermRect *extent, VTermPos pos, VTermAttrMask attrs)
+int fyvt_screen_get_attrs_extent(const struct fyvt_screen *screen, struct fyvt_rect *extent, struct fyvt_pos pos, enum fyvt_attr_mask attrs)
 {
   ScreenCell *target = getcell(screen, pos.row, pos.col);
 
@@ -1218,37 +1218,37 @@ int vterm_screen_get_attrs_extent(const VTermScreen *screen, VTermRect *extent, 
   return 1;
 }
 
-void vterm_screen_convert_color_to_rgb(const VTermScreen *screen, VTermColor *col)
+void fyvt_screen_convert_color_to_rgb(const struct fyvt_screen *screen, union fyvt_color *col)
 {
-  vterm_state_convert_color_to_rgb(screen->state, col);
+  fyvt_state_convert_color_to_rgb(screen->state, col);
 }
 
-static void reset_default_colours(VTermScreen *screen, ScreenCell *buffer)
+static void reset_default_colours(struct fyvt_screen *screen, ScreenCell *buffer)
 {
   for(int row = 0; row <= screen->rows - 1; row++)
     for(int col = 0; col <= screen->cols - 1; col++) {
       ScreenCell *cell = &buffer[row * screen->cols + col];
-      if(VTERM_COLOR_IS_DEFAULT_FG(&cell->pen.fg))
+      if(FYVT_COLOR_IS_DEFAULT_FG(&cell->pen.fg))
         cell->pen.fg = screen->pen.fg;
-      if(VTERM_COLOR_IS_DEFAULT_BG(&cell->pen.bg))
+      if(FYVT_COLOR_IS_DEFAULT_BG(&cell->pen.bg))
         cell->pen.bg = screen->pen.bg;
     }
 }
 
-void vterm_screen_set_default_colors(VTermScreen *screen, const VTermColor *default_fg, const VTermColor *default_bg)
+void fyvt_screen_set_default_colors(struct fyvt_screen *screen, const union fyvt_color *default_fg, const union fyvt_color *default_bg)
 {
-  vterm_state_set_default_colors(screen->state, default_fg, default_bg);
+  fyvt_state_set_default_colors(screen->state, default_fg, default_bg);
 
-  if(default_fg && VTERM_COLOR_IS_DEFAULT_FG(&screen->pen.fg)) {
+  if(default_fg && FYVT_COLOR_IS_DEFAULT_FG(&screen->pen.fg)) {
     screen->pen.fg = *default_fg;
-    screen->pen.fg.type = (screen->pen.fg.type & ~VTERM_COLOR_DEFAULT_MASK)
-                        | VTERM_COLOR_DEFAULT_FG;
+    screen->pen.fg.type = (screen->pen.fg.type & ~FYVT_COLOR_DEFAULT_MASK)
+                        | FYVT_COLOR_DEFAULT_FG;
   }
 
-  if(default_bg && VTERM_COLOR_IS_DEFAULT_BG(&screen->pen.bg)) {
+  if(default_bg && FYVT_COLOR_IS_DEFAULT_BG(&screen->pen.bg)) {
     screen->pen.bg = *default_bg;
-    screen->pen.bg.type = (screen->pen.bg.type & ~VTERM_COLOR_DEFAULT_MASK)
-                        | VTERM_COLOR_DEFAULT_BG;
+    screen->pen.bg.type = (screen->pen.bg.type & ~FYVT_COLOR_DEFAULT_MASK)
+                        | FYVT_COLOR_DEFAULT_BG;
   }
 
   reset_default_colours(screen, screen->buffers[0]);
