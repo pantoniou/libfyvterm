@@ -341,8 +341,19 @@ static int on_text(const char bytes[], size_t len, void *user)
   /* This is a combining char. that needs to be merged with the previous
    * glyph output */
   if(vterm_unicode_is_combining(codepoints[i])) {
-    /* See if the cursor has moved since */
-    if(state->pos.row == state->combine_pos.row && state->pos.col == state->combine_pos.col + state->combine_width) {
+    /* See if the cursor has moved since.
+     *
+     * Neovim carries a fix here (upstream commit 814f2629cb, "fix
+     * (terminal): handle split composing chars at right edge"): at the
+     * right edge of the screen, printing the previous glyph can leave the
+     * cursor at combine_pos itself instead of combine_pos + combine_width,
+     * because there was no room left to advance past it. Accept the whole
+     * [combine_pos, combine_pos + combine_width] range, not just its end,
+     * and drop any deferred wraparound the failed advance left behind. */
+    if(state->pos.row == state->combine_pos.row &&
+        state->pos.col >= state->combine_pos.col &&
+        state->pos.col <= state->combine_pos.col + state->combine_width) {
+      state->at_phantom = 0;
 #ifdef DEBUG_GLYPH_COMBINE
       int printpos;
       printf("DEBUG: COMBINING SPLIT GLYPH of chars {");
