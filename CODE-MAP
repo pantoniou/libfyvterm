@@ -34,8 +34,14 @@ include/vterm_keycodes.h
 LICENSE
  - legalese
 
-Makefile
- - main build file
+CMakeLists.txt
+ - main build file; src/, bin/ and t/ have their own
+
+cmake/
+ - package config and pkg-config templates, and the JoinPaths helper
+
+scripts/
+ - generators for the checked-in Unicode and encoding tables
 
 src/
  - contains the source code for the library
@@ -75,7 +81,10 @@ t/
  - contains unit tests
 
 t/harness.c
- - standalone program to embed the library into for unit-test purposes
+ - the command interpreter the test scripts drive; turns a line of the test
+   command language into libvterm calls and records the callback events
 
-t/run-test.pl
- - invokes the test harness to run a single unit test script
+t/run-test.c
+ - reads a .test script, drives the harness with it, and compares the
+   recorded events against the script's expectations. Links the harness
+   directly, so a test run is a single process with no interpreter

@@ -1,0 +1,10 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+libdir=@PKGCONFIG_LIBDIR@
+includedir=@PKGCONFIG_INCLUDEDIR@
+
+Name: libfyvterm
+Description: Abstract VT220/xterm/ECMA-48 terminal emulation library
+Version: @PROJECT_VERSION@
+URL: @PROJECT_HOMEPAGE_URL@
+Libs: -L${libdir} -lfyvterm
+Cflags: -I${includedir}/libfyvterm

@@ -1,0 +1,155 @@
+name: Build and Test
+
+run-name: >-
+  ${{ github.event_name == 'pull_request' && format('Build and Test · PR #{0}', github.event.pull_request.number) ||
+      github.event_name == 'workflow_dispatch' && 'Build and Test · manual' ||
+      format('Build and Test · {0}', github.ref_name) }}
+
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: ${{ vars.NUMBER_OF_PROCESSORS || 2 }}
+  CTEST_PARALLEL_LEVEL: ${{ vars.NUMBER_OF_PROCESSORS || 2 }}
+  CTEST_OUTPUT_ON_FAILURE: 1
+
+on:
+  push:
+    branches: [ master, stable, devel ]
+  pull_request:
+    branches: [ master, stable, devel ]
+  workflow_dispatch:
+    inputs:
+      ctest_args:
+        description: "Extra ctest arguments (e.g. -R foo, -E bar, -V)"
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  build:
+    name: >-
+      ${{ matrix.os }} · ${{ matrix.compiler }} · ${{ matrix.build_type }}
+      ${{ matrix.shared == 'OFF' && ' · static' || '' }}
+      ${{ matrix.asan == 'ON' && ' · ASAN' || '' }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            compiler: gcc
+            cc: gcc
+            build_type: Debug
+            shared: "ON"
+            asan: "OFF"
+          - os: ubuntu-latest
+            compiler: gcc
+            cc: gcc
+            build_type: Release
+            shared: "ON"
+            asan: "OFF"
+          - os: ubuntu-latest
+            compiler: clang
+            cc: clang
+            build_type: Debug
+            shared: "ON"
+            asan: "ON"
+          - os: ubuntu-latest
+            compiler: gcc
+            cc: gcc
+            build_type: Release
+            shared: "OFF"
+            asan: "OFF"
+          - os: macos-latest
+            compiler: clang
+            cc: clang
+            build_type: Debug
+            shared: "ON"
+            asan: "OFF"
+          - os: macos-latest
+            compiler: clang
+            cc: clang
+            build_type: Debug
+            shared: "ON"
+            asan: "ON"
+
+    steps:
+    - name: Git Sane LF
+      run: |
+        git config --global core.autocrlf false
+        git config --global core.eol lf
+
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install CMake/Ninja
+      uses: lukka/get-cmake@latest
+
+    - name: Install dependencies
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install --no-install-recommends -y \
+          build-essential \
+          clang \
+          libubsan1 \
+          ninja-build \
+          pkg-config \
+          python3
+
+    - name: Install dependencies
+      if: runner.os == 'macOS'
+      run: brew install ninja pkg-config
+
+    - name: Configure
+      shell: bash
+      run: |
+        cmake -S . -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+          -DBUILD_SHARED_LIBS=${{ matrix.shared }} \
+          -DENABLE_ASAN=${{ matrix.asan }} \
+          -DCMAKE_INSTALL_PREFIX="${RUNNER_TEMP}/fyvterm-inst"
+
+    - name: Build
+      run: cmake --build build --config ${{ matrix.build_type }}
+
+    - name: Test
+      shell: bash
+      working-directory: build
+      run: ctest -C ${{ matrix.build_type }} ${{ inputs.ctest_args }}
+
+    # Nothing installed may collide with a system libvterm: not a header, not
+    # a tool name, not the pkg-config file. libfyvterm is a hard fork and must
+    # be co-installable with the original.
+    - name: Install and check for libvterm collisions
+      if: matrix.shared == 'ON'
+      shell: bash
+      run: |
+        cmake --install build
+        cd "${RUNNER_TEMP}/fyvterm-inst"
+        echo "--- installed files:"
+        find . -type f -o -type l | sort
+        for stray in include/vterm.h include/vterm_keycodes.h \
+                     bin/unterm bin/vterm-ctrl bin/vterm-dump \
+                     lib/pkgconfig/vterm.pc; do
+          if [ -e "${stray}" ]; then
+            echo "::error::installed ${stray}, which collides with libvterm"
+            exit 1
+          fi
+        done
+        pkg-config --define-variable=prefix="${PWD}" \
+          --cflags --libs "${PWD}/lib/pkgconfig/libfyvterm.pc"
+
+    - name: Upload test logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-logs-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}-${{ matrix.shared }}-${{ matrix.asan }}-${{ github.run_id }}
+        path: |
+          **/Testing/Temporary/
+          build/**/*.log

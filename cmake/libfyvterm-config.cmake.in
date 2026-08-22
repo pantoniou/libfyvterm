@@ -1,0 +1,7 @@
+@PACKAGE_INIT@
+
+set(libfyvterm_VERSION "@PROJECT_VERSION@")
+
+include(${CMAKE_CURRENT_LIST_DIR}/libfyvterm-targets.cmake)
+
+check_required_components(libfyvterm)

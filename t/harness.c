@@ -3,7 +3,101 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+#include "harness.h"
+
+/* ---------------------------------------------------------------------
+ * Output capture.
+ *
+ * The harness reports events by "printing" them. Rather than write to
+ * stdout for a separate driver process to read back, collect the lines
+ * here so the driver can run in the same process. printf is redirected to
+ * harness_printf below; a line is completed by its trailing newline.
+ * --------------------------------------------------------------------- */
+
+static char **out_lines;
+static size_t out_count, out_alloc;
+static char *out_partial;
+static size_t out_partial_len;
+
+void harness_output_reset(void)
+{
+  for(size_t i = 0; i < out_count; i++)
+    free(out_lines[i]);
+  out_count = 0;
+  free(out_partial);
+  out_partial = NULL;
+  out_partial_len = 0;
+}
+
+size_t harness_output_count(void)
+{
+  return out_count;
+}
+
+const char *harness_output_line(size_t i)
+{
+  return i < out_count ? out_lines[i] : NULL;
+}
+
+static void out_push(const char *text, size_t len)
+{
+  if(out_count == out_alloc) {
+    out_alloc = out_alloc ? out_alloc * 2 : 32;
+    out_lines = realloc(out_lines, out_alloc * sizeof(*out_lines));
+    if(!out_lines)
+      abort();
+  }
+  char *copy = malloc(len + 1);
+  if(!copy)
+    abort();
+  memcpy(copy, text, len);
+  copy[len] = '\0';
+  out_lines[out_count++] = copy;
+}
+
+int harness_printf(const char *fmt, ...)
+{
+  va_list args;
+
+  va_start(args, fmt);
+  int len = vsnprintf(NULL, 0, fmt, args);
+  va_end(args);
+  if(len < 0)
+    return len;
+
+  char *buf = malloc((size_t)len + 1);
+  if(!buf)
+    abort();
+  va_start(args, fmt);
+  vsnprintf(buf, (size_t)len + 1, fmt, args);
+  va_end(args);
+
+  /* Append to the pending partial line, then split off complete lines. */
+  out_partial = realloc(out_partial, out_partial_len + (size_t)len + 1);
+  if(!out_partial)
+    abort();
+  memcpy(out_partial + out_partial_len, buf, (size_t)len + 1);
+  out_partial_len += (size_t)len;
+  free(buf);
+
+  char *start = out_partial, *nl;
+  while((nl = memchr(start, '\n', out_partial_len - (size_t)(start - out_partial)))) {
+    out_push(start, (size_t)(nl - start));
+    start = nl + 1;
+  }
+
+  size_t rest = out_partial_len - (size_t)(start - out_partial);
+  memmove(out_partial, start, rest + 1);
+  out_partial_len = rest;
+
+  return len;
+}
+
+/* Everything below reports events by "printing" them; collect instead. */
+#define printf harness_printf
 
 #define streq(a,b) (!strcmp(a,b))
 #define strstartswith(a,b) (!strncmp(a,b,strlen(b)))
@@ -645,17 +739,17 @@ VTermScreenCallbacks screen_cbs = {
   .sb_pushline4 = screen_sb_pushline4,
 };
 
-int main(int argc, char **argv)
+int harness_command(const char *cmdline)
 {
   char line[1024] = {0};
   int flag;
 
   int err;
 
-  setvbuf(stdout, NULL, _IONBF, 0);
-
-  while(fgets(line, sizeof line, stdin)) {
+  {
     err = 0;
+
+    snprintf(line, sizeof line, "%s", cmdline);
 
     char *nl;
     if((nl = strchr(line, '\n')))
@@ -1253,25 +1347,31 @@ int main(int argc, char **argv)
       else
         printf("?\n");
 
-      memset(line, 0, sizeof line);
-      continue;
+      return 0;
     }
 
     else
       abort_line: err = 1;
 
-    size_t outlen = vterm_output_get_buffer_current(vt);
+    size_t outlen = vt ? vterm_output_get_buffer_current(vt) : 0;
     if(outlen > 0) {
       char outbuff[outlen];
       vterm_output_read(vt, outbuff, outlen);
 
       term_output(outbuff, outlen, NULL);
     }
-
-    printf(err ? "?\n" : "DONE\n");
   }
 
-  vterm_free(vt);
+  return err;
+}
 
-  return 0;
+void harness_cleanup(void)
+{
+  if(vt) {
+    vterm_free(vt);
+    vt = NULL;
+    state = NULL;
+    screen = NULL;
+  }
+  harness_output_reset();
 }
