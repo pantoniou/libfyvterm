@@ -31,6 +31,15 @@
 #define BUFIDX_PRIMARY   0
 #define BUFIDX_ALTSCREEN 1
 
+/* Kitty keyboard protocol flags, carried from Neovim's fork (upstream
+ * commit 6f0bde11cc, "feat(terminal): add support for kitty keyboard
+ * protocol"). https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement */
+#define KEY_ENCODING_DISAMBIGUATE       0x1
+#define KEY_ENCODING_REPORT_EVENTS      0x2
+#define KEY_ENCODING_REPORT_ALTERNATE   0x4
+#define KEY_ENCODING_REPORT_ALL_KEYS    0x8
+#define KEY_ENCODING_REPORT_ASSOCIATED  0x10
+
 typedef struct VTermEncoding VTermEncoding;
 
 typedef struct {
@@ -56,6 +65,20 @@ struct VTermPen
   unsigned int baseline:2;
   unsigned int dim:1;
   unsigned int overline:1;
+};
+
+typedef struct {
+  bool disambiguate:1;
+  bool report_events:1;
+  bool report_alternate:1;
+  bool report_all_keys:1;
+  bool report_associated:1;
+} VTermKeyEncodingFlags;
+
+struct VTermKeyEncodingStack {
+  VTermKeyEncodingFlags items[16];
+  uint8_t size; /* Number of items in the stack: at least 1, at most
+                 * ARRAY_SIZE(items). */
 };
 
 struct VTermState
@@ -180,6 +203,10 @@ struct VTermState
     char *buffer;
     size_t buflen;
   } selection;
+
+  /* Kitty keyboard protocol flag stack: one for the primary screen, one for
+   * the altscreen. */
+  struct VTermKeyEncodingStack key_encoding_stacks[2];
 };
 
 struct VTerm
