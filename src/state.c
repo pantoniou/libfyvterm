@@ -1824,6 +1824,11 @@ static void osc_selection(VTermState *state, VTermStringFragment frag)
   }
 }
 
+/* Neovim carries a fix here (upstream commit ee143aaf65, "fix(terminal):
+ * emit Termrequest for all OSC sequences"): the recognized OSC 0/1/2/52
+ * commands used to return immediately, so a caller's osc fallback never saw
+ * them. Fall through to the fallback for every command, recognized or not,
+ * instead of only for the ones libvterm itself does not understand. */
 static int on_osc(int command, VTermStringFragment frag, void *user)
 {
   VTermState *state = user;
@@ -1832,27 +1837,25 @@ static int on_osc(int command, VTermStringFragment frag, void *user)
     case 0:
       settermprop_string(state, VTERM_PROP_ICONNAME, frag);
       settermprop_string(state, VTERM_PROP_TITLE, frag);
-      return 1;
+      break;
 
     case 1:
       settermprop_string(state, VTERM_PROP_ICONNAME, frag);
-      return 1;
+      break;
 
     case 2:
       settermprop_string(state, VTERM_PROP_TITLE, frag);
-      return 1;
+      break;
 
     case 52:
       if(state->selection.callbacks)
         osc_selection(state, frag);
-
-      return 1;
-
-    default:
-      if(state->fallbacks && state->fallbacks->osc)
-        if((*state->fallbacks->osc)(command, frag, state->fbdata))
-          return 1;
+      break;
   }
+
+  if(state->fallbacks && state->fallbacks->osc)
+    if((*state->fallbacks->osc)(command, frag, state->fbdata))
+      return 1;
 
   return 0;
 }
