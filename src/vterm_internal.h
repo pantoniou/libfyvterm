@@ -21,7 +21,11 @@
 
 #define INTERMED_MAX 16
 
-#define CSI_ARGS_MAX 16
+/* Neovim carries a stack overflow fix here (upstream commit 756751afa3,
+ * "fix(terminal): stack overflow when too many csi args"): a CSI with more
+ * than 16 subparameters (e.g. piped-back scrollback with dense SGR runs)
+ * overflowed the args[] buffer. */
+#define CSI_ARGS_MAX 32
 #define CSI_LEADER_MAX 16
 
 #define BUFIDX_PRIMARY   0
