@@ -4,7 +4,7 @@ WANTSTATE
 !DA
 RESET
 PUSH "\e[c"
-  output "\e[?1;2c"
+  output "\e[?61;22;52c"
 
 !XTVERSION
 RESET
