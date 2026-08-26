@@ -410,20 +410,29 @@ static int on_text(const char bytes[], size_t len, void *user)
       if(!fyvt_unicode_is_combining(codepoints[glyph_ends]))
         break;
 
+    /* A C0 control, DEL or a C1 control that arrived as text has no glyph and
+     * no width. In UTF-8 mode the parser does not read 0x80..0x9F as C1
+     * controls, so U+0080..U+009F reaches here from any program that emits
+     * one. Drop the glyph rather than store a cell that cannot be drawn or
+     * count a width that would move the cursor backwards. Only the base can
+     * be negative: every codepoint after it is combining, and combining
+     * starts well above the controls. */
+    if(fyvt_unicode_width(codepoints[glyph_starts]) < 0) {
+      /* The combining chars belong to the base, so they go with it. */
+      for(i = glyph_ends;
+          i < npoints && fyvt_unicode_is_combining(codepoints[i]); i++)
+        ;
+      i--;
+      continue;
+    }
+
     int width = 0;
 
     uint32_t chars[FYVT_MAX_CHARS_PER_CELL + 1];
 
     for( ; i < glyph_ends; i++) {
       chars[i - glyph_starts] = codepoints[i];
-      int this_width = fyvt_unicode_width(codepoints[i]);
-#ifdef DEBUG
-      if(this_width < 0) {
-        fprintf(stderr, "Text with negative-width codepoint U+%04x\n", codepoints[i]);
-        abort();
-      }
-#endif
-      width += this_width;
+      width += fyvt_unicode_width(codepoints[i]);
     }
 
     while(i < npoints && fyvt_unicode_is_combining(codepoints[i]))
