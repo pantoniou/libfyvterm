@@ -1,0 +1,34 @@
+INIT
+UTF8 1
+WANTSTATE g
+
+# In UTF-8 mode the parser does not read 0x80..0x9F as C1 controls, so a
+# program that emits one sends it here as text. A control has no glyph and no
+# width, and a negative width would move the cursor backwards.
+
+!C1 control as text is not drawn
+# U+0092 = 0xC2 0x92  name: PRIVATE USE TWO
+RESET
+PUSH "A\xC2\x92B"
+  putglyph 0x41 1 0,0
+  putglyph 0x42 1 0,1
+
+!A control alone leaves the cursor where it was
+# U+009B = 0xC2 0x9B  name: CONTROL SEQUENCE INTRODUCER
+RESET
+PUSH "\xC2\x9B"
+  # and nothing more
+PUSH "A"
+  putglyph 0x41 1 0,0
+
+!Combining chars go with the base that was dropped
+# U+0301 = 0xCC 0x81  name: COMBINING ACUTE
+RESET
+PUSH "\xC2\x92\xCC\x81A"
+  putglyph 0x41 1 0,0
+
+!Text on either side of a run of controls stays in place
+RESET
+PUSH "e\xCC\x81\xC2\x92\xC2\x9Be\xCC\x81"
+  putglyph 0x65,0x301 1 0,0
+  putglyph 0x65,0x301 1 0,1
