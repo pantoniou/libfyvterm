@@ -247,6 +247,8 @@ struct fyvt
 
   struct {
     unsigned int utf8:1;
+    /* U+FE0F leaves an emoji base its own width, as VTE draws it */
+    unsigned int emoji_vs_narrow:1;
     unsigned int ctrl8bit:1;
   } mode;
 

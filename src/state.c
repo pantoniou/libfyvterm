@@ -394,7 +394,8 @@ static int on_text(const char bytes[], size_t len, void *user)
 
       /* A selector that arrives late can widen the glyph; at the right edge
        * there is no column for that, and it keeps its width. */
-      int width = fyvt_unicode_glyph_width(state->combine_chars,
+      int width = state->vt->mode.emoji_vs_narrow ? state->combine_width :
+                  fyvt_unicode_glyph_width(state->combine_chars,
                                            state->combine_width);
       if(state->combine_pos.col + width > THISROWWIDTH(state))
         width = state->combine_width;
@@ -460,7 +461,8 @@ static int on_text(const char bytes[], size_t len, void *user)
 
     chars[glyph_ends - glyph_starts] = 0;
     i--;
-    width = fyvt_unicode_glyph_width(chars, width);
+    if(!state->vt->mode.emoji_vs_narrow)
+      width = fyvt_unicode_glyph_width(chars, width);
 
 #ifdef DEBUG_GLYPH_COMBINE
     int printpos;

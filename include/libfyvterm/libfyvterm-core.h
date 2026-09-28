@@ -86,6 +86,14 @@ void fyvt_set_size(struct fyvt *vt, int rows, int cols) FYVT_EXPORT;
 int  fyvt_get_utf8(const struct fyvt *vt) FYVT_EXPORT;
 void fyvt_set_utf8(struct fyvt *vt, int is_utf8) FYVT_EXPORT;
 
+/*
+ * Whether U+FE0F widens a one-column emoji base to two columns, as most
+ * terminals draw it (the default), or leaves it one column, as VTE draws it.
+ * A host that tests how its output lands on either kind of terminal sets it.
+ */
+int  fyvt_get_emoji_vs_wide(const struct fyvt *vt) FYVT_EXPORT;
+void fyvt_set_emoji_vs_wide(struct fyvt *vt, int wide) FYVT_EXPORT;
+
 size_t fyvt_input_write(struct fyvt *vt, const char *bytes, size_t len) FYVT_EXPORT;
 
 /* Setting output callback will override the buffer logic */

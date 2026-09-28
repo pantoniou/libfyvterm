@@ -135,6 +135,16 @@ void fyvt_set_utf8(struct fyvt *vt, int is_utf8)
   vt->mode.utf8 = is_utf8;
 }
 
+int fyvt_get_emoji_vs_wide(const struct fyvt *vt)
+{
+  return !vt->mode.emoji_vs_narrow;
+}
+
+void fyvt_set_emoji_vs_wide(struct fyvt *vt, int wide)
+{
+  vt->mode.emoji_vs_narrow = !wide;
+}
+
 void fyvt_output_set_callback(struct fyvt *vt, fyvt_output_callback *func, void *user)
 {
   vt->outfunc = func;
