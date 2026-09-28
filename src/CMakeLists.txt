@@ -47,6 +47,12 @@ if(NOT _fyvt_hdr_version STREQUAL PROJECT_VERSION)
         "project() says ${PROJECT_VERSION}")
 endif()
 
+# The codepoints that U+FE0F widens, from the Unicode emoji data.
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/EmojiVariation.cmake)
+emoji_variation_table(
+    ${CMAKE_CURRENT_SOURCE_DIR}/data/emoji-variation-sequences.txt
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/emoji-vs.inc)
+
 add_library(fyvterm        ${_fyvterm_sources})
 add_library(fyvterm_static STATIC ${_fyvterm_sources})
 
@@ -66,7 +72,8 @@ foreach(_t fyvterm fyvterm_static)
     target_include_directories(${_t} PUBLIC
         "$<BUILD_INTERFACE:${_fyvterm_incdir}>"
         "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
-    target_include_directories(${_t} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_include_directories(${_t} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_BINARY_DIR}/generated)
     target_compile_definitions(${_t} PRIVATE
         "FYVT_VERSION_STRING=\"${PROJECT_VERSION}\"")
     target_compile_definitions(${_t} PRIVATE "$<$<CONFIG:Debug>:DEBUG>")

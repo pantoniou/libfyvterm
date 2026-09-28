@@ -357,5 +357,9 @@ struct fyvt_encoding *fyvt_lookup_encoding(enum fyvt_encoding_type type, char de
 
 int fyvt_unicode_width(uint32_t codepoint);
 int fyvt_unicode_is_combining(uint32_t codepoint);
+int fyvt_unicode_emoji_vs(uint32_t codepoint);
+/* The columns of a glyph: @chars is its base and its combining codepoints,
+ * zero-terminated, and @width is their sum, codepoint by codepoint. */
+int fyvt_unicode_glyph_width(const uint32_t *chars, int width);
 
 #endif

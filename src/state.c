@@ -392,8 +392,28 @@ static int on_text(const char bytes[], size_t len, void *user)
       printf("}\n");
 #endif
 
+      /* A selector that arrives late can widen the glyph; at the right edge
+       * there is no column for that, and it keeps its width. */
+      int width = fyvt_unicode_glyph_width(state->combine_chars,
+                                           state->combine_width);
+      if(state->combine_pos.col + width > THISROWWIDTH(state))
+        width = state->combine_width;
+
       /* Now render it */
-      putglyph(state, state->combine_chars, state->combine_width, state->combine_pos);
+      putglyph(state, state->combine_chars, width, state->combine_pos);
+
+      /* The cursor goes past the wider glyph, as it would have gone had the
+       * glyph arrived whole. */
+      if(width != state->combine_width) {
+        state->combine_width = width;
+        if(state->combine_pos.col + width >= THISROWWIDTH(state)) {
+          state->pos.col = state->combine_pos.col;
+          if(state->mode.autowrap)
+            state->at_phantom = 1;
+        }
+        else
+          state->pos.col = state->combine_pos.col + width;
+      }
     }
     else {
       DEBUG_LOG("libvterm: TODO: Skip over split char+combining\n");
@@ -440,6 +460,7 @@ static int on_text(const char bytes[], size_t len, void *user)
 
     chars[glyph_ends - glyph_starts] = 0;
     i--;
+    width = fyvt_unicode_glyph_width(chars, width);
 
 #ifdef DEBUG_GLYPH_COMBINE
     int printpos;

@@ -312,3 +312,29 @@ int fyvt_unicode_is_combining(uint32_t codepoint)
 {
   return bisearch(codepoint, combining, sizeof(combining) / sizeof(struct interval) - 1);
 }
+
+/* The codepoints that U+FE0F asks to draw in emoji presentation. CMake makes
+ * the table from src/data/emoji-variation-sequences.txt when the project is
+ * configured. */
+static const struct interval emoji_vs[] = {
+#include "emoji-vs.inc"
+};
+
+int fyvt_unicode_emoji_vs(uint32_t codepoint)
+{
+  return bisearch(codepoint, emoji_vs, sizeof(emoji_vs) / sizeof(emoji_vs[0]) - 1);
+}
+
+int fyvt_unicode_glyph_width(const uint32_t *chars, int width)
+{
+  int i;
+
+  /* A terminal draws a one-column codepoint that has an emoji form as two
+   * columns when U+FE0F selects that form. */
+  if(width != 1 || !chars[0] || !fyvt_unicode_emoji_vs(chars[0]))
+    return width;
+  for(i = 1; chars[i]; i++)
+    if(chars[i] == 0xFE0F)
+      return 2;
+  return width;
+}
