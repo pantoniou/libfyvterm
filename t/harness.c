@@ -889,6 +889,10 @@ int harness_command(const char *cmdline)
       fyvt_set_utf8(vt, flag);
     }
 
+    else if(sscanf(line, "EMOJIVS %d", &flag)) {
+      fyvt_set_emoji_vs_wide(vt, flag);
+    }
+
     else if(streq(line, "RESET")) {
       if(state) {
         fyvt_state_reset(state, 1);

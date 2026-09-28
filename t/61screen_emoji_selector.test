@@ -30,3 +30,16 @@ RESET
 PUSH "\e[80G\xE2\x9C\x88"
 PUSH "\xEF\xB8\x8F"
   ?screen_cell 0,79 = {0x2708,0xfe0f} width=1 attrs={} fg=rgb(240,240,240) bg=rgb(0,0,0)
+
+!With the emoji selector narrow, U+FE0F leaves an emoji base one column
+EMOJIVS 0
+RESET
+PUSH "\xE2\x9D\xA4\xEF\xB8\x8FZ"
+  ?screen_cell 0,0 = {0x2764,0xfe0f} width=1 attrs={} fg=rgb(240,240,240) bg=rgb(0,0,0)
+  ?screen_cell 0,1 = {0x5a} width=1 attrs={} fg=rgb(240,240,240) bg=rgb(0,0,0)
+RESET
+PUSH "\xE2\x9C\x88"
+PUSH "\xEF\xB8\x8FZ"
+  ?screen_cell 0,0 = {0x2708,0xfe0f} width=1 attrs={} fg=rgb(240,240,240) bg=rgb(0,0,0)
+  ?screen_cell 0,1 = {0x5a} width=1 attrs={} fg=rgb(240,240,240) bg=rgb(0,0,0)
+EMOJIVS 1
