@@ -1,0 +1,32 @@
+INIT
+UTF8 1
+WANTSCREEN
+
+!U+FE0F makes a one-column emoji base two columns
+# U+2764 = 0xE2 0x9D 0xA4  name: HEAVY BLACK HEART
+# U+FE0F = 0xEF 0xB8 0x8F  name: VARIATION SELECTOR-16
+RESET
+PUSH "\xE2\x9D\xA4\xEF\xB8\x8FZ"
+  ?screen_cell 0,0 = {0x2764,0xfe0f} width=2 attrs={} fg=rgb(240,240,240) bg=rgb(0,0,0)
+  ?screen_cell 0,2 = {0x5a} width=1 attrs={} fg=rgb(240,240,240) bg=rgb(0,0,0)
+
+!U+FE0F in a later write widens the glyph and moves the cursor past it
+# U+2708 = 0xE2 0x9C 0x88  name: AIRPLANE
+RESET
+PUSH "\xE2\x9C\x88"
+PUSH "\xEF\xB8\x8FZ"
+  ?screen_cell 0,0 = {0x2708,0xfe0f} width=2 attrs={} fg=rgb(240,240,240) bg=rgb(0,0,0)
+  ?screen_cell 0,2 = {0x5a} width=1 attrs={} fg=rgb(240,240,240) bg=rgb(0,0,0)
+
+!U+FE0F leaves a codepoint without an emoji form one column
+# U+2605 = 0xE2 0x98 0x85  name: BLACK STAR
+RESET
+PUSH "\xE2\x98\x85\xEF\xB8\x8FZ"
+  ?screen_cell 0,0 = {0x2605,0xfe0f} width=1 attrs={} fg=rgb(240,240,240) bg=rgb(0,0,0)
+  ?screen_cell 0,1 = {0x5a} width=1 attrs={} fg=rgb(240,240,240) bg=rgb(0,0,0)
+
+!A late selector in the last column has no room to widen the glyph
+RESET
+PUSH "\e[80G\xE2\x9C\x88"
+PUSH "\xEF\xB8\x8F"
+  ?screen_cell 0,79 = {0x2708,0xfe0f} width=1 attrs={} fg=rgb(240,240,240) bg=rgb(0,0,0)
