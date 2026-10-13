@@ -53,6 +53,17 @@ if(CMAKE_C_COMPILER_ID MATCHES GNU|Clang)
 
     set(FYVT_C_WARNINGS -Wall -Wextra)
     add_compile_options(${FYVT_C_WARNINGS})
+    # A returned address of stack storage is NULL in an optimized build.
+    # GCC detects it only when it optimizes.
+    include(CheckCCompilerFlag)
+    check_c_compiler_flag(-Werror=return-local-addr FYVT_HAVE_WERROR_LOCAL_ADDR)
+    if(FYVT_HAVE_WERROR_LOCAL_ADDR)
+        add_compile_options(-Werror=return-local-addr)
+    endif()
+    check_c_compiler_flag(-Werror=return-stack-address FYVT_HAVE_WERROR_STACK_ADDR)
+    if(FYVT_HAVE_WERROR_STACK_ADDR)
+        add_compile_options(-Werror=return-stack-address)
+    endif()
 
     add_compile_definitions(_GNU_SOURCE)
 elseif(MSVC)
