@@ -51,6 +51,7 @@ struct fyvt_screen
   const struct fyvt_screen_callbacks *callbacks;
   void *cbdata;
   bool callbacks_has_pushline4;
+  bool callbacks_has_preerase;
 
   enum fyvt_damage_size damage_merge;
   /* start_row == -1 => no damage */
@@ -321,6 +322,11 @@ static int erase_user(struct fyvt_rect rect, int selective UNUSED, void *user)
 
 static int erase(struct fyvt_rect rect, int selective, void *user)
 {
+  struct fyvt_screen *screen = user;
+
+  if(screen->callbacks_has_preerase && screen->callbacks && screen->callbacks->preerase)
+    (screen->callbacks->preerase)(rect, screen->cbdata);
+
   erase_internal(rect, selective, user);
   return erase_user(rect, 0, user);
 }
@@ -928,6 +934,7 @@ static struct fyvt_screen *screen_new(struct fyvt *vt)
   screen->callbacks = NULL;
   screen->cbdata    = NULL;
   screen->callbacks_has_pushline4 = false;
+  screen->callbacks_has_preerase = false;
 
   screen->buffers[BUFIDX_PRIMARY] = alloc_buffer(screen, rows, cols);
 
@@ -1125,6 +1132,11 @@ void *fyvt_screen_get_cbdata(struct fyvt_screen *screen)
 void fyvt_screen_callbacks_has_pushline4(struct fyvt_screen *screen)
 {
   screen->callbacks_has_pushline4 = true;
+}
+
+void fyvt_screen_callbacks_has_preerase(struct fyvt_screen *screen)
+{
+  screen->callbacks_has_preerase = true;
 }
 
 void fyvt_screen_set_unrecognised_fallbacks(struct fyvt_screen *screen, const struct fyvt_state_fallbacks *fallbacks, void *user)

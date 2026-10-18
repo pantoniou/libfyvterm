@@ -85,6 +85,9 @@ struct fyvt_screen_callbacks {
   int (*sb_clear)(void* user);
   /* ABI-compat this is only used if fyvt_screen_callbacks_has_pushline4() is called */
   int (*sb_pushline4)(int cols, const struct fyvt_screen_cell *cells, bool continuation, void *user);
+  /* ABI-compat this is only used if fyvt_screen_callbacks_has_preerase() is called.
+   * Called before an erase clears @rect, while the cells still hold their text. */
+  int (*preerase)(struct fyvt_rect rect, void *user);
 };
 
 struct fyvt_screen *fyvt_obtain_screen(struct fyvt *vt) FYVT_EXPORT;
@@ -93,6 +96,7 @@ void  fyvt_screen_set_callbacks(struct fyvt_screen *screen, const struct fyvt_sc
 void *fyvt_screen_get_cbdata(struct fyvt_screen *screen) FYVT_EXPORT;
 
 void fyvt_screen_callbacks_has_pushline4(struct fyvt_screen *screen) FYVT_EXPORT;
+void fyvt_screen_callbacks_has_preerase(struct fyvt_screen *screen) FYVT_EXPORT;
 
 void  fyvt_screen_set_unrecognised_fallbacks(struct fyvt_screen *screen, const struct fyvt_state_fallbacks *fallbacks, void *user) FYVT_EXPORT;
 void *fyvt_screen_get_unrecognised_fbdata(struct fyvt_screen *screen) FYVT_EXPORT;
