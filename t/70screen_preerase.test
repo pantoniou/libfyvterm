@@ -1,0 +1,18 @@
+INIT
+WANTSCREEN E
+RESET
+  preerase 0..25,0..80
+
+!Erase of the display reports the rows before it clears them
+PUSH "ABC"
+PUSH "\e[2J"
+  preerase 0..25,0..80
+
+!Erase of characters reports its rectangle
+PUSH "\e[H"
+PUSH "\e[3X"
+  preerase 0..1,0..3
+
+!A scroll is not an erase
+PUSH "\e[5@"
+PUSH "\n"x30

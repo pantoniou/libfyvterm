@@ -700,6 +700,18 @@ static int screen_damage(struct fyvt_rect rect, void *user UNUSED)
   return 1;
 }
 
+static int want_screen_preerase = 0;
+static int screen_preerase(struct fyvt_rect rect, void *user UNUSED)
+{
+  if(!want_screen_preerase)
+    return 1;
+
+  printf("preerase %d..%d,%d..%d\n",
+      rect.start_row, rect.end_row, rect.start_col, rect.end_col);
+
+  return 1;
+}
+
 static int want_screen_scrollback = 0;
 static int screen_sb_pushline4(int cols, const struct fyvt_screen_cell *cells, bool continuation, void *user UNUSED)
 {
@@ -754,6 +766,7 @@ struct fyvt_screen_callbacks screen_cbs = {
   .sb_popline   = screen_sb_popline,
   .sb_clear     = screen_sb_clear,
   .sb_pushline4 = screen_sb_pushline4,
+  .preerase     = screen_preerase,
 };
 
 int harness_command(const char *cmdline)
@@ -845,6 +858,7 @@ int harness_command(const char *cmdline)
         screen = fyvt_obtain_screen(vt);
       fyvt_screen_set_callbacks(screen, &screen_cbs, NULL);
       fyvt_screen_callbacks_has_pushline4(screen);
+      fyvt_screen_callbacks_has_preerase(screen);
 
       int i = 10;
       int sense = 1;
@@ -876,6 +890,9 @@ int harness_command(const char *cmdline)
           break;
         case 'b':
           want_screen_scrollback = sense;
+          break;
+        case 'E':
+          want_screen_preerase = sense;
           break;
         case 'r':
           fyvt_screen_enable_reflow(screen, sense);
